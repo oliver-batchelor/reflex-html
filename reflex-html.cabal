@@ -1,0 +1,35 @@
+name:                reflex-html
+version:             0.1
+synopsis:            HTML DSL for reflex-dom
+description:
+license:             BSD3
+license-file:        LICENSE
+author:              Oliver Batchelor
+category:            Game
+build-type:          Simple 
+-- extra-source-files:  
+cabal-version:       >=1.10
+
+
+library
+  exposed-modules:   Reflex.Dom.Html
+  other-modules: Reflex.Dom.Html.Internal, Reflex.Dom.Html.Elements
+  
+  hs-source-dirs: src
+  build-depends:
+    base,
+    reflex, 
+    reflex-dom, 
+    ghcjs-dom,
+    ref-tf,
+    containers,
+    transformers,
+    contravariant,
+    mtl,
+    lens,
+    exception-transformers
+  default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, RecursiveDo, ScopedTypeVariables, FlexibleContexts, TupleSections, RankNTypes, TypeFamilies
+
+
+  
+
