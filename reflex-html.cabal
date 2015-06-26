@@ -13,7 +13,14 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:   Reflex.Dom.Html
-  other-modules: Reflex.Dom.Html.Internal, Reflex.Dom.Html.Elements
+  other-modules: 
+    Reflex.Dom.Html.Internal, 
+    Reflex.Dom.Html.Elements,
+    Reflex.Dom.Html.Events,
+    Reflex.Dom.Html.Input,
+    Reflex.Dom.Html.Attributes,
+    Reflex.Dom.Html.KeyCodes
+    
   
   hs-source-dirs: src
   build-depends:
@@ -21,13 +28,13 @@ library
     reflex, 
     reflex-dom, 
     ghcjs-dom,
-    ref-tf,
     containers,
     transformers,
     contravariant,
     mtl,
     lens,
-    exception-transformers
+    data-default
+    
   default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, RecursiveDo, ScopedTypeVariables, FlexibleContexts, TupleSections, RankNTypes, TypeFamilies
 
 

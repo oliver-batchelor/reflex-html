@@ -1,4 +1,4 @@
-{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, UndecidableInstances, ImpredicativeTypes, StandaloneDeriving, NoMonomorphismRestriction #-}
+{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction, InstanceSigs #-}
 
 module Reflex.Dom.Html.Internal where
 
@@ -7,35 +7,37 @@ import Reflex.Dom
 
 import Reflex.Host.Class
 
-import GHCJS.DOM.Types hiding (Widget, Event, Element)
-import qualified GHCJS.DOM.Types as D
+import GHCJS.DOM.Types hiding (Widget, Event, Element, IsElement, toElement)
+import qualified GHCJS.DOM.Types as Dom
 
-import GHCJS.DOM.Document
-import GHCJS.DOM.DOMWindow
-import GHCJS.DOM.Element hiding (Element)
-import GHCJS.DOM.UIEvent
-import GHCJS.DOM.EventM 
-import GHCJS.DOM.Node
+import qualified GHCJS.DOM.Document as Dom
+import qualified GHCJS.DOM.DOMWindow as Dom
+import qualified GHCJS.DOM.Element  as Dom
+import qualified GHCJS.DOM.UIEvent  as Dom
+import qualified GHCJS.DOM.EventM  as Dom 
+import qualified GHCJS.DOM.Node  as Dom
 
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Lens
-import Control.Monad.Ref
-import Control.Monad.Fix
-import Control.Monad.Trans
+import Data.Bifunctor (second)
+import Data.List 
 
-import Control.Monad.Exception
+
+import qualified Data.Map as Map
 import Data.Functor.Contravariant
 
 import Data.IORef
 import Data.Maybe
 
-    
-newtype Element = Element { unElem :: D.Element }
+import Data.Functor.Contravariant
+
+type KeyCode = Int
+
+
+
 type Key = String
-
-
 data EventFlag = StopPropagation | PreventDefault 
 
 data ValueA t = StaticA (Maybe String) |  DynamicA (Dynamic t (Maybe String))
@@ -50,6 +52,7 @@ data Attr a = Attr {
 instance Contravariant Attr where
   contramap f (Attr k m) = Attr k (m . f)
 
+
 stringAttr :: Key -> Attr String
 stringAttr key = Attr key Just
 
@@ -61,58 +64,153 @@ boolAttr key = Attr key bool where
   bool True  = Just ""
   bool False = Nothing
 
+makeGroups :: Ord k => [(k, v)] -> [(k, [v])]
+makeGroups  = Map.toList . Map.fromListWith (++) . map (second pure)
 
+  
+concatValues :: (MonadHold t m, Reflex t) =>  [m (ValueA t)] -> m (ValueA t)
+concatValues g = do 
+  (v:vs) <- sequence g
+  foldM catValues v vs 
+  
+-- Make attributes concatenable, if a key is specified twice then the attribute values are concatenated
+catValues :: (MonadHold t m, Reflex t) =>  ValueA t -> ValueA t -> m (ValueA t)
+catValues (StaticA v) (StaticA v') = return $ StaticA $ catValues' v v'
+catValues (DynamicA d) (StaticA v) = DynamicA <$> mapDyn (catValues' v) d 
+catValues (DynamicA d) (DynamicA d') = DynamicA <$> combineDyn catValues' d d' 
+catValues v1 v2 = catValues v2 v1
+  
+catValues' :: Maybe String -> Maybe String -> Maybe String
+catValues' v v' =  case catMaybes [v, v'] of
+  [] -> Nothing
+  l  -> Just $ intercalate " " l
+  
+    
   
 instance MonadWidget t m => Attributes m [Attribute t m] where
   addAttributes attrs e = mapM_ (addAttribute e) attrs 
   
-addAttribute :: (MonadWidget t m, IsElement e) => e -> Attribute t m -> m ()
+addAttribute :: (MonadWidget t m, Dom.IsElement e) => e -> Attribute t m -> m ()
 addAttribute e (k, v) = v >>= add
     
   where    
-    add (StaticA mStr) = liftIO $ forM_ mStr $ elementSetAttribute e k
+    add (StaticA mStr) = liftIO $ forM_ mStr $ Dom.elementSetAttribute e k
     add (DynamicA d)  = do
       schedulePostBuild $ do 
         initial <- sample (current d) 
-        forM_ initial (liftIO . elementSetAttribute e k)
+        forM_ initial (liftIO . Dom.elementSetAttribute e k)
         
       performEvent_ $ addRemove <$> updated d
       
-    addRemove Nothing    = liftIO $ elementRemoveAttribute e k
-    addRemove (Just new) = liftIO $ elementSetAttribute e k new
+    addRemove Nothing    = liftIO $ Dom.elementRemoveAttribute e k
+    addRemove (Just new) = liftIO $ Dom.elementSetAttribute e k new
   
   
-buildEmptyElementNS :: (MonadWidget t m, Attributes m attrs) => Maybe String -> String -> attrs -> m Element
+buildEmptyElementNS :: (MonadWidget t m, Attributes m attrs) => Maybe String -> String -> attrs -> m Dom.Element
 buildEmptyElementNS namespace elementTag attrs = do
   doc <- askDocument
   p <- askParent
   
   Just e <- liftIO $ case namespace of 
-    Just ns -> documentCreateElementNS doc ns elementTag
-    Nothing -> documentCreateElement doc elementTag
+    Just ns -> Dom.documentCreateElementNS doc ns elementTag
+    Nothing -> Dom.documentCreateElement doc elementTag
   
   addAttributes attrs e
-  _ <- liftIO $ nodeAppendChild p $ Just e
-  return $ Element . castToElement $ e  
+  _ <- liftIO $ Dom.nodeAppendChild p $ Just e
+  return $ Dom.castToElement $ e  
+  
+  
+data Element t = Element 
+  { _element_element :: Dom.Element
+  , _element_keypress :: Event t KeyCode
+  , _element_keydown  :: Event t KeyCode
+  , _element_keyup    :: Event t KeyCode
+  , _element_scrolled :: Event t Int
+  , _element_clicked  :: Event t ()  
+  }  
+  
+class IsElement element  where
+  toElement ::  element t -> Element t
+
+
+instance IsElement Element where
+  
+--   toElement ::  Element t -> Element t
+  toElement = id
+  
+  
+makeElement :: MonadWidget t m => Dom.Element -> m (Element t)
+makeElement e = Element e
+      <$> keypressEvent_ [] e
+      <*> keydownEvent_ [] e
+      <*> keyupEvent_ [] e
+      <*> scrolledEvent_ [] e
+      <*> clickedEvent_ [] e  
+  
+element' :: (MonadWidget t m) =>  Maybe String -> String -> [Attribute t m] ->  m a -> m (Element t, a)
+element' ns tag attrs child = do
+  domElem <- buildEmptyElementNS ns tag attrs
+  e <- makeElement domElem
+  result <- subWidget (toNode $ domElem) child    
+  return (e, result)
+
+element_ :: (MonadWidget t m) =>  Maybe String -> String -> [Attribute t m] ->  m a -> m a
+element_ ns tag attrs child = do
+  domElem <- buildEmptyElementNS ns tag attrs
+  subWidget (toNode $ domElem) child    
+  
+  
+   
+domElement :: IsElement element => element t -> Dom.Element
+domElement = _element_element . toElement   
   
      
-wrapEvent :: (MonadWidget t m, IsEvent e) => (D.Element -> EventM e D.Element () -> IO (IO ())) -> EventM e D.Element a -> [EventFlag] -> Element -> m (Event t a)
-wrapEvent onEvent getResult flags (Element e) = do
+wrapEvent :: (MonadWidget t m, Dom.IsEvent event) => (Dom.Element -> Dom.EventM event Dom.Element () -> IO (IO ())) -> Dom.EventM event Dom.Element a -> [EventFlag] -> Dom.Element -> m (Event t a)
+wrapEvent onEvent getResult flags e = do
   event <- wrapDomEvent e onEvent (mapM_ applyFlag flags >> getResult)  
   unless (null flags) $ performEvent_ $ ffor event $ const $ return ()
- 
   return event
-
-applyFlag :: IsEvent e => EventFlag ->  EventM e t ()
-applyFlag StopPropagation = stopPropagation
-applyFlag PreventDefault = preventDefault
+ 
+applyFlag :: IsEvent e => EventFlag -> Dom.EventM e t ()
+applyFlag StopPropagation = Dom.stopPropagation
+applyFlag PreventDefault = Dom.preventDefault
   
+
+  
+-- lift an event binding from one which works on a Dom.Element to one working on an Element
+liftEvent :: IsElement element => ([EventFlag] -> Dom.Element ->  m (Event t a)) ->  
+              [EventFlag] -> element t ->  m (Event t a)
+liftEvent binding flags e = binding flags (domElement e)
+  
+--Raw event bindings
+clickedEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+clickedEvent_ = wrapEvent Dom.elementOnclick (return ())
+
+keypressEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element -> m (Event t Int) 
+keypressEvent_ = wrapEvent Dom.elementOnkeypress  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
+
+keydownEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element  -> m (Event t Int)
+keydownEvent_ = wrapEvent Dom.elementOnkeydown  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
+
+keyupEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element  -> m (Event t Int)
+keyupEvent_ = wrapEvent Dom.elementOnkeyup  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
+
+scrolledEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element -> m (Event t Int)
+scrolledEvent_ flags e = wrapEvent Dom.elementOnscroll (liftIO $ Dom.elementGetScrollTop e) flags e
+  
+blurEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+blurEvent_ = wrapEvent Dom.elementOnblur (return ())
+ 
+focusEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+focusEvent_ = wrapEvent Dom.elementOnfocus (return ()) 
+
+-- Events on the Window level
+
 askWindow :: (MonadIO m, HasDocument m) => m DOMWindow
 askWindow =  do 
-  (Just window) <- askDocument >>= liftIO . documentGetDefaultView 
+  (Just window) <- askDocument >>= liftIO . Dom.documentGetDefaultView 
   return window 
+
+window_keydownEvent :: (MonadWidget t m) => m (Event t Int)
+window_keydownEvent = askWindow >>= \e -> wrapDomEvent e Dom.domWindowOnkeydown  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)  
   
-element' :: (MonadWidget t m) =>  Maybe String -> String -> [Attribute t m] -> (Element -> m a) -> m a
-element' ns tag attrs child = do
-  e <- buildEmptyElementNS ns tag attrs
-  subWidget (toNode $ unElem e) (child e)  
