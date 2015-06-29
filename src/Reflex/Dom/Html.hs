@@ -8,18 +8,12 @@ module Reflex.Dom.Html
   , module Reflex.Dom.Html.KeyCodes
   , module Reflex.Dom
   
-  , Attribute
-  , Attr (..)
-  , EventFlag(..)
-  , Element
-  , IsElement (..)
   
   
   ) where
 
-import Reflex.Dom (mainWidgetWithCss, mainWidget, performEvent, performEvent_, MonadWidget, text, dynText, delay, getPostBuild, list)
+import Reflex.Dom (mainWidgetWithCss, mainWidget, performEvent, performEvent_, MonadWidget, text, dynText, delay, getPostBuild, list, (=:), display)
 
-import Reflex.Dom.Html.Internal
 import Reflex.Dom.Html.Elements
 import Reflex.Dom.Html.Attributes
 import Reflex.Dom.Html.Events

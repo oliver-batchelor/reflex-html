@@ -1,11 +1,19 @@
 {-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction #-}
-module Reflex.Dom.Html.Elements  where
+module Reflex.Dom.Html.Elements 
+  ( module Reflex.Dom.Html.Elements
+  , Element  
+  , IsElement (..)
+  )
+  where
 
 import Reflex.Dom 
-import Reflex.Dom.Html.Internal
-
+import Reflex.Dom.Html.Internal.Element
+import Reflex.Dom.Html.Internal.Attributes
 
 -- Element builders
+            
+  
+
 
 
 htmlElement' :: (MonadWidget t m) =>  String -> [Attribute t m] -> m a -> m (Element t, a)
@@ -50,6 +58,10 @@ li_ = htmlElement_ "li"
 
 button_ = htmlElement_ "button"
 input_ = htmlElement_ "input"
+textArea_ = htmlElement_ "textArea"
+select_ = htmlElement_ "select"
+option_ = htmlElement_ "option"
+
 
 
 
@@ -78,6 +90,11 @@ li' = htmlElement' "li"
 
 button' = htmlElement' "button"
 input' = htmlElement' "input"
+textArea' = htmlElement' "textArea"
+select' = htmlElement' "select"
+option' = htmlElement' "option"
+
+
 
 -- -- SVG elements
 -- 

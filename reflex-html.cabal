@@ -14,7 +14,10 @@ cabal-version:       >=1.10
 library
   exposed-modules:   Reflex.Dom.Html
   other-modules: 
-    Reflex.Dom.Html.Internal, 
+    Reflex.Dom.Html.Internal.Attributes,
+    Reflex.Dom.Html.Internal.Element,
+    Reflex.Dom.Html.Internal.Events,
+    
     Reflex.Dom.Html.Elements,
     Reflex.Dom.Html.Events,
     Reflex.Dom.Html.Input,
@@ -33,7 +36,8 @@ library
     contravariant,
     mtl,
     lens,
-    data-default
+    data-default,
+    safe
     
   default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, RecursiveDo, ScopedTypeVariables, FlexibleContexts, TupleSections, RankNTypes, TypeFamilies
 

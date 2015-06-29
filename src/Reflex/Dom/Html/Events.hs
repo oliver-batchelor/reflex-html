@@ -1,9 +1,15 @@
 {-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction #-}
-module Reflex.Dom.Html.Events where
+module Reflex.Dom.Html.Events 
+  ( module Reflex.Dom.Html.Events
+  , EventFlag(..)
+  ) 
+  where
 
 import Reflex.Dom 
 import Data.Functor
-import Reflex.Dom.Html.Internal
+
+import Reflex.Dom.Html.Internal.Events
+import Reflex.Dom.Html.Internal.Element
 
 
 -- Simple event accessors
