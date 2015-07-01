@@ -10,9 +10,9 @@ module Reflex.Dom.Html.Input
   , textArea
   
   , checkboxView
-  , checkbox
+  , checkboxInput
   
-  , selection
+  , selectInput
   
   )
   where
@@ -121,9 +121,9 @@ instance HasSetFocus (InputConfig a) where
   setFocus = inputConfig_setFocus 
   
                
-inputElement :: MonadWidget t m => String -> [Attribute t m] -> m (Element t)
+inputElement :: MonadWidget t m => String -> Attributes t m -> m (Element t)
 inputElement inputType attrs  = fst <$> input' attrs' (return ())
-  where attrs' = (type_ -: inputType) : attrs
+  where attrs' = overrideA (type_ -: inputType) $  attrs
         
 
 setFocus_ :: MonadWidget t m => Element t -> Event t Bool -> m ()
@@ -149,20 +149,20 @@ makeInput_ cast setter getter (InputConfig initial eSetValue eSetFocus) e = do
     dom = cast $ domElement e
 
 
-textInput :: MonadWidget t m => [Attribute t m] -> InputConfig String t -> m (Input String t)
+textInput :: MonadWidget t m => Attributes t m -> InputConfig String t -> m (Input String t)
 textInput attrs config  =  do
   e <- inputElement "text" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetValue Dom.htmlInputElementGetValue config e
   
              
-textArea :: MonadWidget t m => [Attribute t m] -> InputConfig String t -> m (Input String t)
+textArea :: MonadWidget t m => Attributes t m -> InputConfig String t -> m (Input String t)
 textArea attrs config = textArea' attrs (return ()) >>= \(e, _) ->  do
   makeInput_ Dom.castToHTMLTextAreaElement Dom.htmlTextAreaElementSetValue Dom.htmlTextAreaElementGetValue config e        
              
              
 -- Checkbox
 
-checkboxView :: MonadWidget t m => [Attribute t m] -> Dynamic t Bool -> m (Event t Bool)
+checkboxView :: MonadWidget t m => Attributes t m -> Dynamic t Bool -> m (Event t Bool)
 checkboxView attrs dValue = do
   e <- inputElement "checkbox" attrs 
   let dom = Dom.castToHTMLInputElement $ domElement e
@@ -175,34 +175,17 @@ checkboxView attrs dValue = do
   
 
   
-checkbox :: MonadWidget t m => [Attribute t m] -> InputConfig Bool t -> m (Input Bool t)
-checkbox attrs config  = do
+checkboxInput :: MonadWidget t m => Attributes t m -> InputConfig Bool t -> m (Input Bool t)
+checkboxInput attrs config  = do
   e <- inputElement "checkbox" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetChecked Dom.htmlInputElementGetChecked config e
   
   
-selection :: forall k t m. (MonadWidget t m, Ord k, Show k, Read k) => [Attribute t m] -> Dynamic t (Map k String) -> InputConfig k t -> m (Input k t)
-selection attrs options (InputConfig initial eSetValue eSetFocus) = do
-  (e, _) <- select' attrs $ do
-    optionsWithDefault <- mapDyn (`Map.union` (initial =: "")) options
-    listWithKey optionsWithDefault $ \k v -> do
-      option_ [value_ -: show k, selected_ -: (k == initial)] $ dynText v
+selectInput :: (MonadWidget t m) => Attributes t m -> InputConfig String t -> m a -> m (Input String t, a)
+selectInput attrs  config child = do
+  (e, a) <- select' attrs $ child
+  input <- makeInput_ Dom.castToHTMLSelectElement Dom.htmlSelectElementSetValue Dom.htmlSelectElementGetValue config e
+  return (input, a)
  
-  let dom = Dom.castToHTMLSelectElement $ domElement e
-
-  performEvent_ $ fmap (liftIO . Dom.htmlSelectElementSetValue dom . show) eSetValue
-  eChange <- wrapDomEvent dom Dom.elementOnchange $ do
-    kStr <- liftIO $ Dom.htmlSelectElementGetValue dom
-    return $ readMay kStr
-    
-  setFocus_ e eSetFocus 
-  dFocus <- holdFocus e
-        
-  dValue <- combineDyn readKey options =<< holdDyn (Just initial) (leftmost [eChange, Just <$> eSetValue])
-  return $ Input dValue (attachWith readKey (current options) eChange) dFocus e
-    where 
-      readKey opts mk = fromMaybe initial $ do
-        k <- mk
-        guard $ Map.member k opts
-        return k
+  
   

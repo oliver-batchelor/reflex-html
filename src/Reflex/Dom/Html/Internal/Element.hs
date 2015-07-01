@@ -3,7 +3,7 @@
 module Reflex.Dom.Html.Internal.Element where
 
 import Reflex
-import Reflex.Dom
+import Reflex.Dom hiding (Attributes)
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Document as Dom
@@ -34,24 +34,26 @@ class IsElement element  where
 
 instance IsElement Element where
   toElement = id
+  
+  
 
-addAttribute :: (MonadWidget t m, Dom.IsElement e) => e -> Attribute t m -> m ()
-addAttribute e (k, v) = v >>= add
-    
-  where    
-    add (StaticA mStr) = liftIO $ forM_ mStr $ Dom.elementSetAttribute e k
-    add (DynamicA d)  = do
-      schedulePostBuild $ do 
-        initial <- sample (current d) 
-        forM_ initial (liftIO . Dom.elementSetAttribute e k)
-        
-      performEvent_ $ addRemove <$> updated d
-      
+addAttribute :: (MonadWidget t m, Dom.IsElement e) => e -> (Key, ValueA t m) -> m ()
+addAttribute e (k, StaticA mStr) = liftIO $ forM_ mStr $ Dom.elementSetAttribute e k
+addAttribute e (k, DynamicA makeDyn) = makeDyn >>= \d -> do
+  
+  schedulePostBuild $ do 
+    initial <- sample (current d) 
+    forM_ initial (liftIO . Dom.elementSetAttribute e k)
+     
+  performEvent_ $ addRemove <$> updated d
+  
+  where
     addRemove Nothing    = liftIO $ Dom.elementRemoveAttribute e k
     addRemove (Just new) = liftIO $ Dom.elementSetAttribute e k new
 
-
-buildEmptyElementNS :: (MonadWidget t m) => Maybe String -> String -> [Attribute t m] -> m Dom.Element
+    
+    
+buildEmptyElementNS :: (MonadWidget t m) => Maybe String -> String -> Attributes t m -> m Dom.Element
 buildEmptyElementNS namespace elementTag attrs = do
   doc <- askDocument
   p <- askParent
@@ -60,7 +62,7 @@ buildEmptyElementNS namespace elementTag attrs = do
     Just ns -> Dom.documentCreateElementNS doc ns elementTag
     Nothing -> Dom.documentCreateElement doc elementTag
   
-  mapM_ (addAttribute e) attrs 
+  mapM_ (addAttribute e) (flattenA attrs)
   _ <- liftIO $ Dom.nodeAppendChild p $ Just e
   return $ Dom.castToElement $ e  
   
@@ -78,14 +80,14 @@ domElement :: IsElement element => element t -> Dom.Element
 domElement = _element_element . toElement 
 
 
-element' :: (MonadWidget t m) =>  Maybe String -> String -> [Attribute t m] ->  m a -> m (Element t, a)
+element' :: (MonadWidget t m) =>  Maybe String -> String -> Attributes t m ->  m a -> m (Element t, a)
 element' ns tag attrs child = do
   domElem <- buildEmptyElementNS ns tag attrs
   e <- makeElement domElem
   result <- subWidget (Dom.toNode $ domElem) child    
   return (e, result)
 
-element_ :: (MonadWidget t m) =>  Maybe String -> String -> [Attribute t m] ->  m a -> m a
+element_ :: (MonadWidget t m) =>  Maybe String -> String -> Attributes t m ->  m a -> m a
 element_ ns tag attrs child = do
   domElem <- buildEmptyElementNS ns tag attrs
   subWidget (Dom.toNode $ domElem) child    

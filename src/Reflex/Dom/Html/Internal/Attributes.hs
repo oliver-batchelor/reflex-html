@@ -1,9 +1,9 @@
-{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction, InstanceSigs #-}
+{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction, TemplateHaskell #-}
 
 module Reflex.Dom.Html.Internal.Attributes where
 
 import Reflex
-import Reflex.Dom
+import Reflex.Dom hiding (Attributes)
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Document as Dom
@@ -16,19 +16,71 @@ import Control.Monad.IO.Class
 import Control.Lens
 import Data.Bifunctor (second)
 
+import GHC.Exts
 
 import Data.Maybe 
 import Data.List
-import qualified Data.Map as Map
-import Data.Functor.Contravariant
 
+import qualified Data.Map as Map
+import Data.Map (Map)
+
+import Data.Functor.Contravariant
+import Data.Monoid
 
 
 type Key = String
-data ValueA t = StaticA (Maybe String) |  DynamicA (Dynamic t (Maybe String))
+data ValueA t m = StaticA { _staticValue :: (Maybe String) } |  DynamicA { _dynValue :: (m (Dynamic t (Maybe String))) }
+
+liftM concat $ mapM makeLenses
+  [ ''ValueA
+  ]   
 
 -- If Dynamic becomes a Functor we can remove the "m"
-type Attribute t m = (Key, m (ValueA t))
+newtype Attributes t m = Attributes  { unAttr :: Map Key [ValueA t m] }
+
+
+attr :: (Reflex t, MonadHold t m) => (Key, ValueA t m) -> Attributes t m
+attr (k, v) = Attributes $ Map.singleton k [v]
+
+instance Monoid (Attributes t m) where
+  mempty = Attributes Map.empty
+  mappend (Attributes a) (Attributes b) = Attributes $ Map.unionWith (++) a b
+
+overrideA :: (Reflex t, MonadHold t m) => Attributes t m -> Attributes t m -> Attributes t m
+overrideA (Attributes a) (Attributes b) = Attributes $ Map.union a b
+
+
+flattenA :: (Reflex t, MonadHold t m) => Attributes t m -> [(Key, ValueA t m)]
+flattenA  = map (second concatValues) . Map.toList . unAttr
+
+
+instance IsList (Attributes t m) where
+  type Item (Attributes t m) = Attributes t m
+    
+  fromList = mconcat
+  toList x = [x]
+  
+   
+mergeListDyn :: (Reflex t, MonadHold t m) => [Dynamic t a] -> m (Dynamic t [a])   
+mergeListDyn dyns = do 
+  lists <- mapM (mapDyn (:[])) dyns 
+  mconcatDyn lists
+  
+  
+concatValues :: (Reflex t, MonadHold t m) => [ValueA t m] -> ValueA t m
+concatValues values = case dynamic of
+  [] -> StaticA $ joinStrs static
+  d  -> DynamicA $ do
+    values <- sequence d >>= mergeListDyn
+    mapDyn (joinStrs . (++ static)) values 
+    
+  where
+    static  = catMaybes $ map (^? staticValue) values
+    dynamic = catMaybes $ map (^? dynValue) values
+  
+    joinStrs = Just . intercalate " " . catMaybes
+
+  
 data Attr a = Attr { 
   _attr_key :: Key, 
   _attr_map :: a -> Maybe String 
@@ -49,26 +101,9 @@ boolAttr key = Attr key bool where
   bool True  = Just ""
   bool False = Nothing
 
-makeGroups :: Ord k => [(k, v)] -> [(k, [v])]
-makeGroups  = Map.toList . Map.fromListWith (++) . map (second pure)
 
   
-concatValues :: (MonadHold t m, Reflex t) =>  [m (ValueA t)] -> m (ValueA t)
-concatValues g = do 
-  (v:vs) <- sequence g
-  foldM catValues v vs 
-  
--- Make attributes concatenable, if a key is specified twice then the attribute values are concatenated
-catValues :: (MonadHold t m, Reflex t) =>  ValueA t -> ValueA t -> m (ValueA t)
-catValues (StaticA v) (StaticA v') = return $ StaticA $ catValues' v v'
-catValues (DynamicA d) (StaticA v) = DynamicA <$> mapDyn (catValues' v) d 
-catValues (DynamicA d) (DynamicA d') = DynamicA <$> combineDyn catValues' d d' 
-catValues v1 v2 = catValues v2 v1
-  
-catValues' :: Maybe String -> Maybe String -> Maybe String
-catValues' v v' =  case catMaybes [v, v'] of
-  [] -> Nothing
-  l  -> Just $ intercalate " " l
+
   
     
   

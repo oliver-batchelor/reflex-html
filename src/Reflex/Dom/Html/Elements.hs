@@ -6,7 +6,7 @@ module Reflex.Dom.Html.Elements
   )
   where
 
-import Reflex.Dom 
+import Reflex.Dom hiding (Attributes)
 import Reflex.Dom.Html.Internal.Element
 import Reflex.Dom.Html.Internal.Attributes
 
@@ -15,20 +15,19 @@ import Reflex.Dom.Html.Internal.Attributes
   
 
 
-
-htmlElement' :: (MonadWidget t m) =>  String -> [Attribute t m] -> m a -> m (Element t, a)
+htmlElement' :: (MonadWidget t m) =>  String -> Attributes t m -> m a -> m (Element t, a)
 htmlElement' = element' Nothing 
 
-htmlElement_ :: (MonadWidget t m) => String -> [Attribute t m] -> m a -> m a
+htmlElement_ :: (MonadWidget t m) => String -> Attributes t m -> m a -> m a
 htmlElement_  = element_ Nothing
 
-svgElement' :: (MonadWidget t m) =>  String -> [Attribute t m] -> m a -> m (Element t, a)
+svgElement' :: (MonadWidget t m) =>  String -> Attributes t m -> m a -> m (Element t, a)
 svgElement' = element' (Just svgNamespace)  
   
 svgNamespace :: String   
 svgNamespace = "http://www.w3.org/2000/svg" 
   
-svgElement_ :: (MonadWidget t m) => String -> [Attribute t m] -> m a -> m a
+svgElement_ :: (MonadWidget t m) => String -> Attributes t m -> m a -> m a
 svgElement_  = element_ (Just svgNamespace) 
 
 

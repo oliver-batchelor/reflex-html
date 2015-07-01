@@ -5,7 +5,7 @@ module Reflex.Dom.Html.Events
   ) 
   where
 
-import Reflex.Dom 
+import Reflex.Dom hiding (Attributes)
 import Data.Functor
 
 import Reflex.Dom.Html.Internal.Events
