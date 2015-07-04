@@ -1,4 +1,3 @@
-{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction #-}
 module Reflex.Dom.Html.Events 
   ( module Reflex.Dom.Html.Events
   , EventFlag(..)
@@ -10,22 +9,22 @@ import Data.Functor
 
 import Reflex.Dom.Html.Internal.Events
 import Reflex.Dom.Html.Internal.Element
-
+ 
 
 -- Simple event accessors
-clicked :: IsElement e  => e t -> Event t ()
+clicked :: IsElement e  => e tag t -> Event t ()
 clicked = _element_clicked . toElement
 
-keypress :: IsElement e => e t -> Event t KeyCode
+keypress :: IsElement e => e tag t -> Event t KeyCode
 keypress = _element_keypress . toElement
 
-keydown :: IsElement e => e t -> Event t KeyCode
+keydown :: IsElement e => e tag t -> Event t KeyCode
 keydown = _element_keydown . toElement
 
-keyup :: IsElement e => e t -> Event t KeyCode
+keyup :: IsElement e => e tag t -> Event t KeyCode
 keyup = _element_keyup . toElement
 
-scrolled :: IsElement e => e t -> Event t Int
+scrolled :: IsElement e => e tag t -> Event t Int
 scrolled = _element_scrolled . toElement
 
 
@@ -43,7 +42,7 @@ blurEvent = liftEvent blurEvent_
 
 
 -- Convenience bindings (used by Input)
-holdFocus :: (MonadWidget t m, IsElement e) => e t -> m (Dynamic t Bool)
+holdFocus :: (MonadWidget t m, IsElement e) => e tag t -> m (Dynamic t Bool)
 holdFocus e = do
   eFocus <- focusEvent [] e
   eBlur <- blurEvent [] e

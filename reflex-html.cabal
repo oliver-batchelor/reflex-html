@@ -17,6 +17,7 @@ library
     Reflex.Dom.Html.Internal.Attributes,
     Reflex.Dom.Html.Internal.Element,
     Reflex.Dom.Html.Internal.Events,
+    Reflex.Dom.Html.Internal.Html
     
     Reflex.Dom.Html.Elements,
     Reflex.Dom.Html.Events,
@@ -37,9 +38,14 @@ library
     mtl,
     lens,
     data-default,
-    safe
+    safe,
+    ref-tf,
+    exception-transformers,
+    bytestring,
+    singletons
     
-  default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, RecursiveDo, ScopedTypeVariables, FlexibleContexts, TupleSections, RankNTypes, TypeFamilies
+  default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, TupleSections, EmptyDataDecls, RecursiveDo, ScopedTypeVariables, 
+                      FlexibleContexts, GADTs, RankNTypes, TypeFamilies, DataKinds, ConstraintKinds, NoMonomorphismRestriction
 
 
   

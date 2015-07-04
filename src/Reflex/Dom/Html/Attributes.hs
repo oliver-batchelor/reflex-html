@@ -1,4 +1,3 @@
-{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction #-}
 module Reflex.Dom.Html.Attributes  
   ( module Reflex.Dom.Html.Attributes
   , Attributes

@@ -1,4 +1,4 @@
-{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction, TupleSections, TemplateHaskell #-}
+{-# LANGUAGE   TemplateHaskell #-}
 
 module Reflex.Dom.Html.Input 
   (  def, (&), (.~)
@@ -6,13 +6,13 @@ module Reflex.Dom.Html.Input
   , HasValue (..), HasSetValue (..)
   , HasFocus (..), HasSetFocus (..)
   
-  , textInput
-  , textArea
-  
-  , checkboxView
-  , checkboxInput
-  
-  , selectInput
+--   , textInput
+--   , textArea
+--   
+--   , checkboxView
+--   , checkboxInput
+--   
+--   , selectInput
   
   )
   where
@@ -37,15 +37,14 @@ import qualified GHCJS.DOM.HTMLTextAreaElement as Dom
 import qualified GHCJS.DOM.HTMLSelectElement as Dom
 
 
-
-
-
 import Reflex.Dom (performEvent_, MonadWidget, schedulePostBuild, listWithKey, dynText, (=:), wrapDomEvent)
 
 import Reflex
 import Reflex.Dom.Html.Internal.Element
 import Reflex.Dom.Html.Internal.Events
 import Reflex.Dom.Html.Internal.Attributes
+import Reflex.Dom.Html.Internal.Html
+import Reflex.Dom.Html.Internal.Tag
 
 
 import Reflex.Dom.Html.Events
@@ -73,10 +72,10 @@ class HasSetFocus c where
   setFocus :: Lens' (c t) (Event t Bool)    
   
  
-data Input a t = Input { _input_value :: Dynamic t a
+data Input a tag t = Input { _input_value :: Dynamic t a
                , _input_changed :: Event t a
                , _input_hasFocus :: Dynamic t Bool
-               , _input_element :: Element t 
+               , _input_element :: Element tag t 
                }
                
 data InputConfig a t
@@ -95,15 +94,15 @@ liftM concat $ mapM makeLenses
 
 -- TextInput
                
-instance HasValue (Input a) where
-  type Value (Input a) = a
+instance HasValue (Input a tag) where
+  type Value (Input a tag) = a
   value = _input_value
   changed = _input_changed
                   
 instance IsElement (Input a) where
   toElement = _input_element
   
-instance HasFocus (Input a) where
+instance HasFocus (Input a tag) where
   hasFocus = _input_hasFocus  
                       
 instance (Reflex t, Default a) => Default (InputConfig a t) where
@@ -119,9 +118,9 @@ instance HasSetValue (InputConfig a) where
   
 instance HasSetFocus (InputConfig a) where
   setFocus = inputConfig_setFocus 
-  
+  {-
                
-inputElement :: MonadWidget t m => String -> Attributes t m -> m (Element t)
+inputElement :: MonadWidget t m => String -> Attributes t m -> Html p m (Element Input_ t)
 inputElement inputType attrs  = fst <$> input' attrs' (return ())
   where attrs' = overrideA (type_ -: inputType) $  attrs
         
@@ -136,7 +135,7 @@ inputEvent_ :: (MonadWidget t m, Dom.IsElement e) =>  e -> (e -> IO a) -> m (Eve
 inputEvent_ e f = wrapEvent Dom.elementOninput (liftIO $ f e) [] e 
 
 
-makeInput_ :: (MonadWidget t m, Dom.IsElement e) => (Dom.Element -> e) -> (e -> a -> IO ()) -> (e -> IO a) -> InputConfig a t -> Element t ->  m (Input a t)
+makeInput_ :: (MonadWidget t m, Dom.IsElement e) => (Dom.Element -> e) -> (e -> a -> IO ()) -> (e -> IO a) -> InputConfig t a -> Element tag t ->  m (Input tag t a)
 makeInput_ cast setter getter (InputConfig initial eSetValue eSetFocus) e = do
   liftIO $ setter dom initial
   performEvent_ $ liftIO . setter dom  <$> eSetValue
@@ -149,20 +148,20 @@ makeInput_ cast setter getter (InputConfig initial eSetValue eSetFocus) e = do
     dom = cast $ domElement e
 
 
-textInput :: MonadWidget t m => Attributes t m -> InputConfig String t -> m (Input String t)
+textInput :: MonadWidget t m => Attributes t m -> InputConfig String t -> Html p m (Input String t)
 textInput attrs config  =  do
   e <- inputElement "text" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetValue Dom.htmlInputElementGetValue config e
   
              
-textArea :: MonadWidget t m => Attributes t m -> InputConfig String t -> m (Input String t)
+textArea :: MonadWidget t m => Attributes t m -> InputConfig String t -> Html p m (Input String t)
 textArea attrs config = textArea' attrs (return ()) >>= \(e, _) ->  do
   makeInput_ Dom.castToHTMLTextAreaElement Dom.htmlTextAreaElementSetValue Dom.htmlTextAreaElementGetValue config e        
              
              
 -- Checkbox
 
-checkboxView :: MonadWidget t m => Attributes t m -> Dynamic t Bool -> m (Event t Bool)
+checkboxView :: MonadWidget t m => Attributes t m -> Dynamic t Bool -> Html p m (Event t Bool)
 checkboxView attrs dValue = do
   e <- inputElement "checkbox" attrs 
   let dom = Dom.castToHTMLInputElement $ domElement e
@@ -175,17 +174,17 @@ checkboxView attrs dValue = do
   
 
   
-checkboxInput :: MonadWidget t m => Attributes t m -> InputConfig Bool t -> m (Input Bool t)
+checkboxInput :: MonadWidget t m => Attributes t m -> InputConfig Bool t -> Html p m (Input Bool t)
 checkboxInput attrs config  = do
   e <- inputElement "checkbox" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetChecked Dom.htmlInputElementGetChecked config e
   
   
-selectInput :: (MonadWidget t m) => Attributes t m -> InputConfig String t -> m a -> m (Input String t, a)
+selectInput :: (MonadWidget t m) => Attributes t m -> InputConfig String t -> Html c m a -> Html p m (Input String t, a)
 selectInput attrs  config child = do
   (e, a) <- select' attrs $ child
   input <- makeInput_ Dom.castToHTMLSelectElement Dom.htmlSelectElementSetValue Dom.htmlSelectElementGetValue config e
   return (input, a)
  
   
-  
+  -}
