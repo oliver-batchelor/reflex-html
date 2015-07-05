@@ -45,7 +45,7 @@ library
     singletons
     
   default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, TupleSections, EmptyDataDecls, RecursiveDo, ScopedTypeVariables, 
-                      FlexibleContexts, GADTs, RankNTypes, TypeFamilies, DataKinds, ConstraintKinds, NoMonomorphismRestriction
+                      FlexibleContexts, FlexibleInstances, GADTs, RankNTypes, TypeFamilies, DataKinds, ConstraintKinds, NoMonomorphismRestriction
 
 
   

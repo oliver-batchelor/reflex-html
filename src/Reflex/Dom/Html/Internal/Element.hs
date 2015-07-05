@@ -1,12 +1,10 @@
-{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction, InstanceSigs #-}
+{-# LANGUAGE  FunctionalDependencies #-}
 
 module Reflex.Dom.Html.Internal.Element where
 
 import Reflex
 import Reflex.Dom hiding (Attributes, buildEmptyElement, buildElement)
 
-import Data.Singletons.Prelude
-import Data.Singletons
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Document as Dom
@@ -29,23 +27,28 @@ import Reflex.Dom.Html.Internal.Tag
 import Unsafe.Coerce
 
 
-data Element (tag :: Tag) t = Element 
+type Tag = String
+
+data Element t = Element 
   { _element_element :: Dom.Element
-  , _element_keypress :: Event t KeyCode
-  , _element_keydown  :: Event t KeyCode
-  , _element_keyup    :: Event t KeyCode
-  , _element_scrolled :: Event t Int
-  , _element_clicked  :: Event t ()  
+  ,  _element_events  :: Events t
   }  
   
-class IsElement element  where
-  toElement ::  element tag t -> Element tag t
 
-
-instance IsElement Element where
+class HasReflex r where
+  type T r :: * 
+  
+instance HasReflex (Element t) where
+  type T (Element t) = t 
+  
+  
+class HasReflex e => IsElement e  where
+  toElement ::  e -> Element (T e)
+  
+instance IsElement (Element t) where
   toElement = id
   
-  
+
 
 addAttribute :: (MonadWidget t m, Dom.IsElement e) => e -> (Key, ValueA t m) -> m ()
 addAttribute dom (k, StaticA mStr) = liftIO $ forM_ mStr $ Dom.elementSetAttribute dom k
@@ -76,34 +79,26 @@ buildEmptyElement namespace elementTag attrs = do
   
 
   
-bindElement :: MonadWidget t m => Dom.Element -> m (Element tag t)
-bindElement dom = Element dom
-      <$> keypressEvent_ [] dom
-      <*> keydownEvent_ [] dom
-      <*> keyupEvent_ [] dom
-      <*> scrolledEvent_ [] dom
-      <*> clickedEvent_ [] dom  
+ 
       
-domElement :: IsElement element => element tag t -> Dom.Element
+domElement :: IsElement e => e -> Dom.Element
 domElement = _element_element . toElement 
 
 
-buildElement :: forall tag m t c a p. (SingI tag, MonadWidget t m) => Proxy (tag :: Tag) -> Attributes t m -> Html c m a -> Html p m (Dom.Element, a)
-buildElement _ attrs child = do
-  dom <- lift $ buildEmptyElement htmlNamespace (tagName tag) attrs
+buildElement :: (MonadWidget t m) => Tag -> Attributes t m -> Html c m a -> Html p m (Dom.Element, a)
+buildElement tag attrs child = do
+  dom <- lift $ buildEmptyElement htmlNamespace tag attrs
   r <- subWidget (Dom.toNode $ dom) (unsafeCoerce child)    
   return (dom, r)
 
-  where
-    (tag :: Tag) = fromSing (sing :: Sing tag) 
 
-element' :: (SingI tag, MonadWidget t m) =>  Proxy (tag :: Tag) -> Attributes t m -> Html c m a -> Html p m (Element tag t, a)
+element' :: (MonadWidget t m) =>  Tag -> Attributes t m -> Html c m a -> Html p m (Element t, a)
 element' tag attrs child = do
   (dom, r) <- buildElement tag attrs child  
-  e <- bindElement dom
-  return (e, r)
+  events <- bindEvents dom
+  return (Element dom events, r)
 
-element_ :: (SingI tag, MonadWidget t m) =>  Proxy (tag :: Tag) -> Attributes t m ->  Html c m a -> Html p m a
+element_ :: (MonadWidget t m) =>  Tag -> Attributes t m ->  Html c m a -> Html p m a
 element_ tag attrs child = snd <$> buildElement tag attrs child  
 
 
@@ -124,6 +119,6 @@ htmlNamespace = "http://www.w3.org/1999/xhtml"
 
   
 -- lift an event binding from one which works on a Dom.Element to one working on an Element
-liftEvent :: IsElement element => ([EventFlag] -> Dom.Element ->  m (Event t a)) ->  
-              [EventFlag] -> element e t ->  m (Event t a)
-liftEvent binding flags e = binding flags (domElement e)
+liftEvent :: IsElement e => ([EventFlag] -> Dom.Element ->  m (Event (T e) a)) ->  
+              [EventFlag] -> e ->  m (Event (T e) a)
+liftEvent binding flags e = binding flags (domElement e) 

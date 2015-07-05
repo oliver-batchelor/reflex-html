@@ -23,12 +23,30 @@ import Control.Lens
 type KeyCode = Int
 data EventFlag = StopPropagation | PreventDefault 
 
+
+data Events t = Events 
+  { _on_keypress :: Event t KeyCode
+  , _on_keydown  :: Event t KeyCode
+  , _on_keyup    :: Event t KeyCode
+  , _on_scrolled :: Event t Int
+  , _on_clicked  :: Event t ()    
+  }
+
+
+bindEvents :: MonadWidget t m => Dom.Element -> m (Events t)
+bindEvents dom = Events
+      <$> keypressEvent_ [] dom
+      <*> keydownEvent_ [] dom
+      <*> keyupEvent_ [] dom
+      <*> scrolledEvent_ [] dom
+      <*> clickedEvent_ [] dom 
      
 wrapEvent :: (MonadWidget t m, Dom.IsEvent event, Dom.IsElement el) => (el -> Dom.EventM event el () -> IO (IO ())) -> Dom.EventM event el a -> [EventFlag] -> el -> m (Event t a)
 wrapEvent onEvent getResult flags e = do
   event <- wrapDomEvent e onEvent (mapM_ applyFlag flags >> getResult)  
   unless (null flags) $ performEvent_ $ ffor event $ const $ return ()
   return event
+  
  
 applyFlag :: Dom.IsEvent e => EventFlag -> Dom.EventM e t ()
 applyFlag StopPropagation = Dom.stopPropagation

@@ -54,31 +54,31 @@ import Reflex.Dom.Html.Elements
 
   
 -- Value of an element
-class HasValue e  where
+class HasReflex e => HasValue e  where
   type Value e :: *
-  value   :: e t -> Dynamic t (Value e)
-  changed :: e t -> Event t (Value e)   -- Change events from user input (not programatically changed)
+  value   :: e -> Dynamic (T e) (Value e)
+  changed :: e -> Event (T e) (Value e)   -- Change events from user input (not programatically changed)
 
   
-class HasSetValue c where
+class HasReflex c => HasSetValue c where
   type SetValue c :: *  
-  setValue      :: Lens' (c t) (Event t (SetValue c))  
-  initialValue  :: Lens' (c t) (SetValue c)
+  setValue      :: Lens' c (Event (T c) (SetValue c))  
+  initialValue  :: Lens' c (SetValue c)
 
-class HasFocus e   where
-  hasFocus :: e t -> Dynamic t Bool
+class HasReflex e => HasFocus e   where
+  hasFocus :: e -> Dynamic (T e) Bool
   
-class HasSetFocus c where
-  setFocus :: Lens' (c t) (Event t Bool)    
+class HasReflex c => HasSetFocus c where
+  setFocus :: Lens' c (Event (T c) Bool)    
   
  
-data Input a tag t = Input { _input_value :: Dynamic t a
+data Input t a = Input { _input_value :: Dynamic t a
                , _input_changed :: Event t a
                , _input_hasFocus :: Dynamic t Bool
-               , _input_element :: Element tag t 
+               , _input_element :: Element t 
                }
                
-data InputConfig a t
+data InputConfig t a
     = InputConfig { _inputConfig_initialValue :: a
                   , _inputConfig_setValue :: Event t a
                   , _inputConfig_setFocus :: Event t Bool
@@ -92,31 +92,39 @@ liftM concat $ mapM makeLenses
   ]      
   
 
--- TextInput
+-- Input instances
+instance HasReflex (Input t a) where
+  type T (Input t a) = t
+  
+instance HasReflex (InputConfig t a) where
+  type T (InputConfig t a) = t
+  
                
-instance HasValue (Input a tag) where
-  type Value (Input a tag) = a
+instance HasValue (Input t a) where
+  type Value (Input t a) = a
   value = _input_value
   changed = _input_changed
-                  
-instance IsElement (Input a) where
+                 
+                 
+                 
+instance IsElement (Input t a) where
   toElement = _input_element
   
-instance HasFocus (Input a tag) where
+instance HasFocus (Input t a) where
   hasFocus = _input_hasFocus  
                       
-instance (Reflex t, Default a) => Default (InputConfig a t) where
+instance (Reflex t, Default a) => Default (InputConfig t a) where
   def = InputConfig { _inputConfig_initialValue = def
                         , _inputConfig_setValue = never
                         , _inputConfig_setFocus = never
                         }                      
                         
-instance HasSetValue (InputConfig a) where
-  type SetValue (InputConfig a) = a
+instance HasSetValue (InputConfig t a) where
+  type SetValue (InputConfig t a) = a
   setValue     = inputConfig_setValue
   initialValue = inputConfig_initialValue 
   
-instance HasSetFocus (InputConfig a) where
+instance HasSetFocus (InputConfig t a) where
   setFocus = inputConfig_setFocus 
   {-
                

@@ -39,6 +39,14 @@ liftM concat $ mapM makeLenses
 newtype Attributes t m = Attributes  { unAttr :: Map Key [ValueA t m] }
 
 
+instance IsList (Attributes t m) where
+  type Item (Attributes t m) = Attributes t m
+    
+  fromList = mconcat
+  toList x = [x]
+  
+
+
 attr :: (Reflex t, MonadHold t m) => (Key, ValueA t m) -> Attributes t m
 attr (k, v) = Attributes $ Map.singleton k [v]
 
@@ -54,12 +62,6 @@ flattenA :: (Reflex t, MonadHold t m) => Attributes t m -> [(Key, ValueA t m)]
 flattenA  = map (second concatValues) . Map.toList . unAttr
 
 
-instance IsList (Attributes t m) where
-  type Item (Attributes t m) = Attributes t m
-    
-  fromList = mconcat
-  toList x = [x]
-  
    
 mergeListDyn :: (Reflex t, MonadHold t m) => [Dynamic t a] -> m (Dynamic t [a])   
 mergeListDyn dyns = do 

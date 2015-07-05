@@ -10,25 +10,29 @@ import Data.Functor
 import Reflex.Dom.Html.Internal.Events
 import Reflex.Dom.Html.Internal.Element
  
-
--- Simple event accessors
-clicked :: IsElement e  => e tag t -> Event t ()
-clicked = _element_clicked . toElement
-
-keypress :: IsElement e => e tag t -> Event t KeyCode
-keypress = _element_keypress . toElement
-
-keydown :: IsElement e => e tag t -> Event t KeyCode
-keydown = _element_keydown . toElement
-
-keyup :: IsElement e => e tag t -> Event t KeyCode
-keyup = _element_keyup . toElement
-
-scrolled :: IsElement e => e tag t -> Event t Int
-scrolled = _element_scrolled . toElement
-
+ 
+toEvents :: IsElement e => e -> Events (T e)
+toEvents = _element_events . toElement
 
  
+-- Simple event accessors
+clicked :: IsElement e  => e -> Event (T e) ()
+clicked = _on_clicked . toEvents
+
+
+keypress :: IsElement e => e -> Event (T e) KeyCode
+keypress = _on_keypress . toEvents
+
+keydown :: IsElement e => e-> Event (T e) KeyCode
+keydown = _on_keydown . toEvents
+
+keyup :: IsElement e => e -> Event (T e) KeyCode
+keyup = _on_keyup . toEvents
+
+scrolled :: IsElement e => e -> Event (T e) Int
+scrolled = _on_scrolled . toEvents
+
+
 
 -- Event binders
 
@@ -42,7 +46,7 @@ blurEvent = liftEvent blurEvent_
 
 
 -- Convenience bindings (used by Input)
-holdFocus :: (MonadWidget t m, IsElement e) => e tag t -> m (Dynamic t Bool)
+holdFocus :: (MonadWidget (T e) m, IsElement e) => e -> m (Dynamic (T e) Bool)
 holdFocus e = do
   eFocus <- focusEvent [] e
   eBlur <- blurEvent [] e
