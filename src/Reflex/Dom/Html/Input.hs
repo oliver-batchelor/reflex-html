@@ -126,7 +126,10 @@ instance HasSetValue (InputConfig t a) where
   
 instance HasSetFocus (InputConfig t a) where
   setFocus = inputConfig_setFocus 
-  {-
+  
+
+  
+{-
                
 inputElement :: MonadWidget t m => String -> Attributes t m -> Html p m (Element Input_ t)
 inputElement inputType attrs  = fst <$> input' attrs' (return ())

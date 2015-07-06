@@ -5,6 +5,7 @@ module Reflex.Dom.Html.Internal.Element where
 import Reflex
 import Reflex.Dom hiding (Attributes, buildEmptyElement, buildElement)
 
+import Data.Singletons
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Document as Dom
@@ -27,7 +28,6 @@ import Reflex.Dom.Html.Internal.Tag
 import Unsafe.Coerce
 
 
-type Tag = String
 
 data Element t = Element 
   { _element_element :: Dom.Element
@@ -85,21 +85,23 @@ domElement :: IsElement e => e -> Dom.Element
 domElement = _element_element . toElement 
 
 
-buildElement :: (MonadWidget t m) => Tag -> Attributes t m -> Html c m a -> Html p m (Dom.Element, a)
-buildElement tag attrs child = do
-  dom <- lift $ buildEmptyElement htmlNamespace tag attrs
+buildElement :: forall t m cm c pm p a. (MonadWidget t m, SingI c) =>  Attributes t m -> Html cm c m a -> Html pm p m (Dom.Element, a)
+buildElement attrs child = do
+  dom <- lift $ buildEmptyElement (tagName tag) htmlNamespace attrs
   r <- subWidget (Dom.toNode $ dom) (unsafeCoerce child)    
   return (dom, r)
+    where
+      tag = fromSing (sing :: Sing (c :: Tag))
 
 
-element' :: (MonadWidget t m) =>  Tag -> Attributes t m -> Html c m a -> Html p m (Element t, a)
-element' tag attrs child = do
-  (dom, r) <- buildElement tag attrs child  
+element' :: (MonadWidget t m, SingI c) =>  Attributes t m -> Html cm c m a -> Html pm p m (Element t, a)
+element' attrs child = do
+  (dom, r) <- buildElement attrs child  
   events <- bindEvents dom
   return (Element dom events, r)
 
-element_ :: (MonadWidget t m) =>  Tag -> Attributes t m ->  Html c m a -> Html p m a
-element_ tag attrs child = snd <$> buildElement tag attrs child  
+element_ :: (MonadWidget t m, SingI c) =>  Attributes t m ->  Html cm c m a -> Html pm p m a
+element_ attrs child = snd <$> buildElement attrs child  
 
 
   

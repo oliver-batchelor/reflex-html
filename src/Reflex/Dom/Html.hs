@@ -33,10 +33,10 @@ import Data.ByteString (ByteString)
 
 type Impl = R.Widget R.Spider (R.Gui R.Spider (R.WithWebView R.SpiderHost) (R.HostFrame R.Spider))
 
-mainWidget ::  Html Flow Impl () -> IO ()
+mainWidget ::  Html Flow Body_ Impl () -> IO ()
 mainWidget body = R.mainWidget (runHtml body)
 
 
-mainWidgetWithCss ::  ByteString -> Html Flow Impl () -> IO ()
+mainWidgetWithCss ::  ByteString -> Html Flow Body_ Impl () -> IO ()
 mainWidgetWithCss css body = R.mainWidgetWithCss css (runHtml body)
 
