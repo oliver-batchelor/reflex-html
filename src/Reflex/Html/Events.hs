@@ -1,14 +1,13 @@
-module Reflex.Dom.Html.Events 
-  ( module Reflex.Dom.Html.Events
+module Reflex.Html.Events 
+  ( module Reflex.Html.Events
   , EventFlag(..)
   ) 
   where
 
-import Reflex.Dom hiding (Attributes)
 import Data.Functor
 
-import Reflex.Dom.Html.Internal.Events
-import Reflex.Dom.Html.Internal.Element
+import Reflex.Html.Internal.Events
+import Reflex.Html.Internal.Element
  
  
 toEvents :: IsElement e => e -> Events (T e)

@@ -1,9 +1,8 @@
-{-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction, InstanceSigs #-}
+module Reflex.Html.Internal.Events where
 
-module Reflex.Dom.Html.Internal.Events where
+import Reflex.Html.Internal.HtmlT
+import Reflex.Html.Internal.Host
 
-import Reflex
-import Reflex.Dom
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Document as Dom
@@ -33,7 +32,7 @@ data Events t = Events
   }
 
 
-bindEvents :: MonadWidget t m => Dom.Element -> m (Events t)
+bindEvents :: MonadAppHost t m => Dom.Element -> m (Events t)
 bindEvents dom = Events
       <$> keypressEvent_ [] dom
       <*> keydownEvent_ [] dom
@@ -41,12 +40,34 @@ bindEvents dom = Events
       <*> scrolledEvent_ [] dom
       <*> clickedEvent_ [] dom 
      
-wrapEvent :: (MonadWidget t m, Dom.IsEvent event, Dom.IsElement el) => (el -> Dom.EventM event el () -> IO (IO ())) -> Dom.EventM event el a -> [EventFlag] -> el -> m (Event t a)
-wrapEvent onEvent getResult flags e = do
-  event <- wrapDomEvent e onEvent (mapM_ applyFlag flags >> getResult)  
-  unless (null flags) $ performEvent_ $ ffor event $ const $ return ()
-  return event
   
+  
+type EventCallback e event = (e -> Dom.EventM event e () -> IO (IO ()))
+ 
+domEvent :: (MonadAppHost t m, Dom.IsEvent event, Dom.IsElement e) 
+  => EventCallback e event -> Dom.EventM event e a -> [EventFlag] -> e -> m (Event t a)
+domEvent elementOnevent getValue  flags element = domEventMaybe elementOnevent (liftM Just getValue) flags element
+
+
+domEventMaybe :: (MonadAppHost t m, Dom.IsEvent event, Dom.IsElement e) => 
+  EventCallback e event -> Dom.EventM event e (Maybe a) -> [EventFlag] -> e -> m (Event t a)
+domEventMaybe  elementOnevent getValue flags element = do
+  fire <- getAsyncFire
+  e <- newEventWithTrigger $ \et -> do
+        unsubscribe <- liftIO $ elementOnevent element $  do
+          mv <-  getValue
+          mapM_ applyFlag flags
+          
+          forM_ mv $ \v -> liftIO $ fire [et :=> v]
+        return $ liftIO $ do
+          unsubscribe
+          
+  unless (null flags) $ 
+    performEvent_ $ pure () <$ e  
+         
+  return $!  e
+ 
+ 
  
 applyFlag :: Dom.IsEvent e => EventFlag -> Dom.EventM e t ()
 applyFlag StopPropagation = Dom.stopPropagation
@@ -55,30 +76,30 @@ applyFlag PreventDefault = Dom.preventDefault
 
   
 --Raw event bindings
-clickedEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
-clickedEvent_ = wrapEvent Dom.elementOnclick (return ())
+clickedEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+clickedEvent_ = domEvent Dom.elementOnclick (return ())
 
-keypressEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element -> m (Event t Int) 
-keypressEvent_ = wrapEvent Dom.elementOnkeypress  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
+keypressEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element -> m (Event t Int) 
+keypressEvent_ = domEvent Dom.elementOnkeypress  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
 
-keydownEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element  -> m (Event t Int)
-keydownEvent_ = wrapEvent Dom.elementOnkeydown  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
+keydownEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element  -> m (Event t Int)
+keydownEvent_ = domEvent Dom.elementOnkeydown  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
 
-keyupEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element  -> m (Event t Int)
-keyupEvent_ = wrapEvent Dom.elementOnkeyup  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
+keyupEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element  -> m (Event t Int)
+keyupEvent_ = domEvent Dom.elementOnkeyup  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
 
-scrolledEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element -> m (Event t Int)
-scrolledEvent_ flags e = wrapEvent Dom.elementOnscroll (liftIO $ Dom.elementGetScrollTop e) flags e
+scrolledEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element -> m (Event t Int)
+scrolledEvent_ flags e = domEvent Dom.elementOnscroll (liftIO $ Dom.elementGetScrollTop e) flags e
   
-blurEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
-blurEvent_ = wrapEvent Dom.elementOnblur (return ())
+blurEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+blurEvent_ = domEvent Dom.elementOnblur (return ())
  
-focusEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
-focusEvent_ = wrapEvent Dom.elementOnfocus (return ()) 
+focusEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+focusEvent_ = domEvent Dom.elementOnfocus (return ()) 
 
 
-changeEvent_ :: (MonadWidget t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
-changeEvent_ = wrapEvent Dom.elementOnchange (return ()) 
+changeEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+changeEvent_ = domEvent Dom.elementOnchange (return ()) 
 
 mouseLocal :: Dom.Element -> Dom.UIEvent -> IO (Int, Int)
 mouseLocal e event = do
@@ -90,16 +111,16 @@ mouseLocal e event = do
   return (x - ex, y - ey)
   
   
-mouseMove_ :: MonadWidget t m => Dom.Element ->  m (Event t (Int, Int))
-mouseMove_ e = wrapDomEvent e Dom.elementOnkeypress (liftIO . mouseLocal e =<< Dom.event)
+-- mouseMove_ :: MonadAppHost t m => Dom.Element ->  m (Event t (Int, Int))
+-- mouseMove_ e = wrapDomEvent e Dom.elementOnkeypress (liftIO . mouseLocal e =<< Dom.event)
 
 -- Events on the Window level
 
-askWindow :: (MonadIO m, HasDocument m) => m Dom.DOMWindow
-askWindow =  do 
-  (Just window) <- askDocument >>= liftIO . Dom.documentGetDefaultView 
-  return window 
-
-window_keydownEvent :: (MonadWidget t m) => m (Event t Int)
-window_keydownEvent = askWindow >>= \e -> wrapDomEvent e Dom.domWindowOnkeydown  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)  
+-- askWindow :: (MonadIO m, HasDocument m) => m Dom.DOMWindow
+-- askWindow =  do 
+--   (Just window) <- askDocument >>= liftIO . Dom.documentGetDefaultView 
+--   return window 
+-- 
+-- window_keydownEvent :: (MonadAppHost t m) => m (Event t Int)
+-- window_keydownEvent = askWindow >>= \e -> wrapDomEvent e Dom.domWindowOnkeydown  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)  
   

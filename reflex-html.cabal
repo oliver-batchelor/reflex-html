@@ -12,25 +12,28 @@ cabal-version:       >=1.10
 
 
 library
-  exposed-modules:   Reflex.Dom.Html
-  other-modules: 
-    Reflex.Dom.Html.Internal.Attributes,
-    Reflex.Dom.Html.Internal.Element,
-    Reflex.Dom.Html.Internal.Events,
-    Reflex.Dom.Html.Internal.Html
+  exposed-modules:   
+    Reflex.Html,
+    Reflex.Html.Elements,
+    Reflex.Html.Events,
+    Reflex.Html.Input,
+    Reflex.Html.Attributes,
+    Reflex.Html.KeyCodes
     
-    Reflex.Dom.Html.Elements,
-    Reflex.Dom.Html.Events,
-    Reflex.Dom.Html.Input,
-    Reflex.Dom.Html.Attributes,
-    Reflex.Dom.Html.KeyCodes
+  other-modules: 
+    Reflex.Html.Internal.Attributes,
+    Reflex.Html.Internal.Element,
+    Reflex.Html.Internal.Events,
+    Reflex.Html.Internal.HtmlT,
+    Reflex.Html.Internal.Host,
+    Reflex.Html.Internal.Util
     
   
   hs-source-dirs: src
   build-depends:
     base,
     reflex, 
-    reflex-dom, 
+    reflex-host,
     ghcjs-dom,
     containers,
     transformers,
@@ -39,13 +42,17 @@ library
     lens,
     data-default,
     safe,
-    ref-tf,
     exception-transformers,
     bytestring,
-    singletons
+    singletons,
+    semigroups,
+    reducers,
+    dependent-sum
     
+  default-language: Haskell2010  
   default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, TupleSections, EmptyDataDecls, RecursiveDo, ScopedTypeVariables, 
-                      FlexibleContexts, FlexibleInstances, GADTs, RankNTypes, TypeFamilies, DataKinds, ConstraintKinds, NoMonomorphismRestriction
+                      FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, GADTs, RankNTypes, TypeFamilies, DataKinds, ConstraintKinds,
+                      StandaloneDeriving, NoMonomorphismRestriction
 
 
   

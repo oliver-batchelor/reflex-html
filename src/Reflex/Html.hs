@@ -1,42 +1,36 @@
 {-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, FunctionalDependencies #-}
  
-module Reflex.Dom.Html 
-  ( module Reflex.Dom.Html.Elements
-  , module Reflex.Dom.Html.Attributes
-  , module Reflex.Dom.Html.Events  
-  , module Reflex.Dom.Html.Input
-  , module Reflex.Dom.Html.KeyCodes
-  , module Reflex.Dom
+module Reflex.Html
+  ( module Reflex.Html.Elements
+  , module Reflex.Html.Attributes
+  , module Reflex.Html.Events  
+  , module Reflex.Html.Input
+  , module Reflex.Html.KeyCodes
   
-  , mainWidget
-  , mainWidgetWithCss
+  , runHtml
+  , withCss
   
   , Html
   
   
   ) where
 
-import Reflex.Dom (performEvent, performEvent_, MonadWidget, text, dynText, delay, getPostBuild, list, (=:), display)
-import qualified Reflex.Dom as R
-import qualified Reflex.Host.Class as R
+import Reflex.Html.Internal.Host
+  
+import Reflex.Html.Elements
+import Reflex.Html.Attributes
+import Reflex.Html.Events
+import Reflex.Html.Input
+import Reflex.Html.KeyCodes
 
-import Reflex.Dom.Html.Elements
-import Reflex.Dom.Html.Attributes
-import Reflex.Dom.Html.Events
-import Reflex.Dom.Html.Input
-import Reflex.Dom.Html.KeyCodes
-
-import Reflex.Dom.Html.Internal.Html
-import Reflex.Dom.Html.Internal.Tag
+import Reflex.Html.Internal.HtmlT
 
 import Data.ByteString (ByteString)
 
-type Impl = R.Widget R.Spider (R.Gui R.Spider (R.WithWebView R.SpiderHost) (R.HostFrame R.Spider))
 
-mainWidget ::  Html Flow Body_ Impl () -> IO ()
-mainWidget body = R.mainWidget (runHtml body)
+runHtml :: HtmlT (AppHost Spider) () -> HtmlT (AppHost Spider) () -> IO ()
+runHtml head body = undefined
 
 
-mainWidgetWithCss ::  ByteString -> Html Flow Body_ Impl () -> IO ()
-mainWidgetWithCss css body = R.mainWidgetWithCss css (runHtml body)
-
+withCss :: String -> Html m ()
+withCss = undefined

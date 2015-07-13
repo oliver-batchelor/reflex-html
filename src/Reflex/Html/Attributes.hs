@@ -1,10 +1,9 @@
-module Reflex.Dom.Html.Attributes  
-  ( module Reflex.Dom.Html.Attributes
+module Reflex.Html.Attributes  
+  ( module Reflex.Html.Attributes
   , Attributes
   , Attr 
   ) where
   
-import Reflex.Dom hiding (Attributes)
 
 import Control.Applicative
 import Control.Monad
@@ -13,7 +12,7 @@ import Data.List
 import Data.Functor.Contravariant
 
 import qualified Data.Map as Map
-import Reflex.Dom.Html.Internal.Attributes
+import Reflex.Html.Internal.Attributes
 
 -- Attribute binders
 (-:) :: (MonadHold t m, Reflex t) => Attr a -> a -> Attributes t m
@@ -35,7 +34,7 @@ infixr 7 -:
 infixr 7 ~:
 infixr 7 ~?
   
--- -- HTML attributes
+-- -- HtmlT attributes
 -- width_, height_, class_, href_, style_ ::  Attr String
 width_ = stringAttr "width"
 height_ = stringAttr "height"

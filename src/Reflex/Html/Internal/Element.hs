@@ -1,9 +1,6 @@
 {-# LANGUAGE  FunctionalDependencies #-}
 
-module Reflex.Dom.Html.Internal.Element where
-
-import Reflex
-import Reflex.Dom hiding (Attributes, buildEmptyElement, buildElement)
+module Reflex.Html.Internal.Element where
 
 
 import qualified GHCJS.DOM.Types as Dom
@@ -19,15 +16,14 @@ import Control.Monad.IO.Class
 import Control.Lens
 import Control.Monad.Trans
 
-import Reflex.Dom.Html.Internal.Attributes
-import Reflex.Dom.Html.Internal.Events
-import Reflex.Dom.Html.Internal.Html
-import Reflex.Dom.Html.Internal.Tag
-
-import Unsafe.Coerce
+import Reflex.Html.Internal.Attributes
+import Reflex.Html.Internal.Events
+import Reflex.Html.Internal.HtmlT
+import Reflex.Html.Internal.Host
 
 
 type Tag = String
+type Namespace = String
 
 data Element t = Element 
   { _element_element :: Dom.Element
@@ -50,11 +46,11 @@ instance IsElement (Element t) where
   
 
 
-addAttribute :: (MonadWidget t m, Dom.IsElement e) => e -> (Key, ValueA t m) -> m ()
+addAttribute :: (MonadAppHost t m, Dom.IsElement e) => e -> (Key, ValueA t m) -> m ()
 addAttribute dom (k, StaticA mStr) = liftIO $ forM_ mStr $ Dom.elementSetAttribute dom k
 addAttribute dom (k, DynamicA makeDyn) = makeDyn >>= \d -> do
   
-  schedulePostBuild $ do 
+  schedulePostBuild_ $ do 
     initial <- sample (current d) 
     forM_ initial (liftIO . Dom.elementSetAttribute dom k)
      
@@ -66,18 +62,16 @@ addAttribute dom (k, DynamicA makeDyn) = makeDyn >>= \d -> do
 
     
     
-buildEmptyElement :: (MonadWidget t m) => String -> String -> Attributes t m -> m Dom.Element
+buildEmptyElement :: MonadAppHost t m => String -> String -> Attributes t m -> HtmlT m Dom.Element
 buildEmptyElement namespace elementTag attrs = do
   doc <- askDocument
   p <- askParent
-  
-  Just dom <- liftIO $ Dom.documentCreateElementNS doc namespace elementTag
-  
-  mapM_ (addAttribute dom) (flattenA attrs)
-  _ <- liftIO $ Dom.nodeAppendChild p $ Just dom
-  return $ Dom.castToElement dom  
-  
 
+  Just dom <- liftIO $ Dom.documentCreateElementNS doc namespace elementTag  
+  lift $ mapM_ (addAttribute dom) (flattenA attrs)
+  void $ liftIO $ Dom.nodeAppendChild p $ Just dom
+
+  return $ Dom.castToElement dom  
   
  
       
@@ -85,42 +79,44 @@ domElement :: IsElement e => e -> Dom.Element
 domElement = _element_element . toElement 
 
 
-buildElement :: (MonadWidget t m) => Tag -> Attributes t m -> Html c m a -> Html p m (Dom.Element, a)
-buildElement tag attrs child = do
-  dom <- lift $ buildEmptyElement htmlNamespace tag attrs
-  r <- subWidget (Dom.toNode $ dom) (unsafeCoerce child)    
+ 
+buildElement :: MonadAppHost t m => Namespace -> Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Dom.Element, a)
+buildElement namespace tag attrs child = do
+  dom <- buildEmptyElement namespace tag attrs
+  r <- localChild (Dom.toNode dom) child
   return (dom, r)
 
 
-element' :: (MonadWidget t m) =>  Tag -> Attributes t m -> Html c m a -> Html p m (Element t, a)
-element' tag attrs child = do
-  (dom, r) <- buildElement tag attrs child  
+element' :: MonadAppHost t m =>  Namespace -> Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Element t, a)
+element' ns tag attrs child = do
+  (dom, r) <- buildElement ns tag attrs child  
   events <- bindEvents dom
   return (Element dom events, r)
 
-element_ :: (MonadWidget t m) =>  Tag -> Attributes t m ->  Html c m a -> Html p m a
-element_ tag attrs child = snd <$> buildElement tag attrs child  
+element_ :: MonadAppHost t m => Namespace -> Tag -> Attributes t m ->  HtmlT m a -> HtmlT m a
+element_ ns tag attrs child = snd <$> buildElement tag attrs child  
 
 
-empty_ :: (MonadWidget t m) =>  Tag -> Attributes t m -> Html p m ()
-empty_ tag attrs = element_ tag attrs $ return ()
-
-
-empty' :: (MonadWidget t m) =>  Tag -> Attributes t m -> Html p m (Element t)
-empty' tag attrs = fst <$> element' tag attrs $ return ()
   
 htmlNamespace :: String
 htmlNamespace = "http://www.w3.org/1999/xhtml"
 
 
--- svgElement' :: (MonadWidget t m) =>  String -> Attributes t m -> Html c m a -> Html p m (Element e t, a)
--- svgElement' = element' (Just svgNamespace)  
---   
--- svgNamespace :: String   
--- svgNamespace = "http://www.w3.org/2000/svg" 
---   
--- svgElement_ :: (MonadWidget t m) => String -> Attributes t m -> Html c m a -> Html p m a
--- svgElement_  = element_ (Just svgNamespace)   
+htmlElement' :: MonadAppHost t m =>  Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Element t, a)
+htmlElement' = element' htmlNamespace
+
+htmlElement_ :: MonadAppHost t m =>  Tag -> Attributes t m -> HtmlT m a -> HtmlT m a
+htmlElement_  = element_ htmlNamespace
+
+
+svgNamespace :: String   
+svgNamespace = "http://www.w3.org/2000/svg" 
+
+svgElement' :: MonadAppHost t m =>  Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Element t, a)
+svgElement'  = element' svgNamespace
+
+svgElement_ :: MonadAppHost t m =>  Tag -> Attributes t m -> HtmlT m a -> HtmlT m a
+svgElement_  = element_ svgNamespace
 
 
   

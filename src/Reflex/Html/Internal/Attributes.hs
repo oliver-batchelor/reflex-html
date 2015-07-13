@@ -1,9 +1,8 @@
 {-# LANGUAGE  FlexibleInstances, MultiParamTypeClasses, ScopedTypeVariables, NoMonomorphismRestriction, TemplateHaskell #-}
 
-module Reflex.Dom.Html.Internal.Attributes where
+module Reflex.Html.Internal.Attributes where
 
 import Reflex
-import Reflex.Dom hiding (Attributes)
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Document as Dom

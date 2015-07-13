@@ -1,6 +1,6 @@
-module Reflex.Dom.Html.KeyCodes where
+module Reflex.Html.KeyCodes where
 
-import Reflex.Dom.Html.Internal.Events
+import Reflex.Html.Internal.Events
 
 keycodeBackspace = 8 :: KeyCode
 keycodeTab = 9 :: KeyCode

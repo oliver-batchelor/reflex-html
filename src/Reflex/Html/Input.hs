@@ -1,6 +1,6 @@
 {-# LANGUAGE   TemplateHaskell #-}
 
-module Reflex.Dom.Html.Input 
+module Reflex.Html.Input 
   (  def, (&), (.~)
   , Input, InputConfig
   , HasValue (..), HasSetValue (..)
@@ -37,19 +37,14 @@ import qualified GHCJS.DOM.HTMLTextAreaElement as Dom
 import qualified GHCJS.DOM.HTMLSelectElement as Dom
 
 
-import Reflex.Dom (performEvent_, MonadWidget, schedulePostBuild, listWithKey, dynText, (=:), wrapDomEvent)
+import Reflex.Html.Internal.Element
+import Reflex.Html.Internal.Events
+import Reflex.Html.Internal.Attributes
+import Reflex.Html.Internal.HtmlT
 
-import Reflex
-import Reflex.Dom.Html.Internal.Element
-import Reflex.Dom.Html.Internal.Events
-import Reflex.Dom.Html.Internal.Attributes
-import Reflex.Dom.Html.Internal.Html
-import Reflex.Dom.Html.Internal.Tag
-
-
-import Reflex.Dom.Html.Events
-import Reflex.Dom.Html.Attributes
-import Reflex.Dom.Html.Elements
+import Reflex.Html.Events
+import Reflex.Html.Attributes
+import Reflex.Html.Elements
 
 
   
@@ -131,7 +126,7 @@ instance HasSetFocus (InputConfig t a) where
   
 {-
                
-inputElement :: MonadWidget t m => String -> Attributes t m -> Html p m (Element Input_ t)
+inputElement :: MonadWidget t m => String -> Attributes t m -> HtmlT p m (Element Input_ t)
 inputElement inputType attrs  = fst <$> input' attrs' (return ())
   where attrs' = overrideA (type_ -: inputType) $  attrs
         
@@ -159,20 +154,20 @@ makeInput_ cast setter getter (InputConfig initial eSetValue eSetFocus) e = do
     dom = cast $ domElement e
 
 
-textInput :: MonadWidget t m => Attributes t m -> InputConfig String t -> Html p m (Input String t)
+textInput :: MonadWidget t m => Attributes t m -> InputConfig String t -> HtmlT p m (Input String t)
 textInput attrs config  =  do
   e <- inputElement "text" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetValue Dom.htmlInputElementGetValue config e
   
              
-textArea :: MonadWidget t m => Attributes t m -> InputConfig String t -> Html p m (Input String t)
+textArea :: MonadWidget t m => Attributes t m -> InputConfig String t -> HtmlT p m (Input String t)
 textArea attrs config = textArea' attrs (return ()) >>= \(e, _) ->  do
   makeInput_ Dom.castToHTMLTextAreaElement Dom.htmlTextAreaElementSetValue Dom.htmlTextAreaElementGetValue config e        
              
              
 -- Checkbox
 
-checkboxView :: MonadWidget t m => Attributes t m -> Dynamic t Bool -> Html p m (Event t Bool)
+checkboxView :: MonadWidget t m => Attributes t m -> Dynamic t Bool -> HtmlT p m (Event t Bool)
 checkboxView attrs dValue = do
   e <- inputElement "checkbox" attrs 
   let dom = Dom.castToHTMLInputElement $ domElement e
@@ -185,13 +180,13 @@ checkboxView attrs dValue = do
   
 
   
-checkboxInput :: MonadWidget t m => Attributes t m -> InputConfig Bool t -> Html p m (Input Bool t)
+checkboxInput :: MonadWidget t m => Attributes t m -> InputConfig Bool t -> HtmlT p m (Input Bool t)
 checkboxInput attrs config  = do
   e <- inputElement "checkbox" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetChecked Dom.htmlInputElementGetChecked config e
   
   
-selectInput :: (MonadWidget t m) => Attributes t m -> InputConfig String t -> Html c m a -> Html p m (Input String t, a)
+selectInput :: (MonadWidget t m) => Attributes t m -> InputConfig String t -> HtmlT c m a -> HtmlT p m (Input String t, a)
 selectInput attrs  config child = do
   (e, a) <- select' attrs $ child
   input <- makeInput_ Dom.castToHTMLSelectElement Dom.htmlSelectElementSetValue Dom.htmlSelectElementGetValue config e
