@@ -72,6 +72,7 @@ mergeList' = (fmap NE.toList) . mergeList
 filterIndexes :: [Int] -> [a] -> [a] 
 filterIndexes inds as = map snd $ filter (not . flip elem inds . fst) $ zip [(0::Int)..] as
  
+  
 collect ::  (MonadHold t m, Reflex t, MonadFix m) => Event t [(a, Event t ())] -> m (Event t [a]) 
 collect newItems = do
   rec

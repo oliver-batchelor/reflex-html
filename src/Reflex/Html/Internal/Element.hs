@@ -1,4 +1,4 @@
-{-# LANGUAGE  FunctionalDependencies #-}
+{-# LANGUAGE  FunctionalDependencies, TemplateHaskell #-}
 
 module Reflex.Html.Internal.Element where
 
@@ -30,12 +30,26 @@ data Element t = Element
   ,  _element_events  :: Events t
   }  
   
+  
+data ElementConfig t m = ElementConfig
+  { _namespace :: Namespace
+  , _tagName   :: Tag        
+  , _attributes :: Attributes t m 
+  }
 
+liftM concat $ mapM makeLenses
+  [ ''ElementConfig
+  ]   
+  
 class HasReflex r where
   type T r :: * 
   
 instance HasReflex (Element t) where
   type T (Element t) = t 
+
+  
+instance HasReflex (ElementConfig t m) where
+  type T (ElementConfig t m) = t 
   
   
 class HasReflex e => IsElement e  where
@@ -97,30 +111,18 @@ element_ :: MonadAppHost t m => Namespace -> Tag -> Attributes t m ->  HtmlT m a
 element_ ns tag attrs child = snd <$> buildElement ns tag attrs child  
 
 
-  
-htmlNamespace :: String
-htmlNamespace = "http://www.w3.org/1999/xhtml"
+el_ :: MonadAppHost t m => ElementConfig t m -> HtmlT m ()
+el_ (ElementConfig ns tag attrs)  = element_ ns tag attrs $ return ()  
 
+el :: MonadAppHost t m => ElementConfig t m -> HtmlT m a -> HtmlT m a
+el (ElementConfig ns tag attrs) child = element_ ns tag attrs child  
 
-htmlElement' :: MonadAppHost t m =>  Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Element t, a)
-htmlElement' = element' htmlNamespace
-
-htmlElement_ :: MonadAppHost t m =>  Tag -> Attributes t m -> HtmlT m a -> HtmlT m a
-htmlElement_  = element_ htmlNamespace
-
-
-svgNamespace :: String   
-svgNamespace = "http://www.w3.org/2000/svg" 
-
-svgElement' :: MonadAppHost t m =>  Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Element t, a)
-svgElement'  = element' svgNamespace
-
-svgElement_ :: MonadAppHost t m =>  Tag -> Attributes t m -> HtmlT m a -> HtmlT m a
-svgElement_  = element_ svgNamespace
-
+el' :: MonadAppHost t m => ElementConfig t m -> HtmlT m a -> HtmlT m (Element t, a)
+el' (ElementConfig ns tag attrs) child = element' ns tag attrs child
 
   
 -- lift an event binding from one which works on a Dom.Element to one working on an Element
 liftEvent :: IsElement e => ([EventFlag] -> Dom.Element ->  m (Event (T e) a)) ->  
               [EventFlag] -> e ->  m (Event (T e) a)
 liftEvent binding flags e = binding flags (domElement e) 
+
