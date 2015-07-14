@@ -13,6 +13,8 @@ import Data.Functor.Contravariant
 
 import qualified Data.Map as Map
 import Reflex.Html.Internal.Attributes
+import Reflex.Html.Internal.Host
+
 
 -- Attribute binders
 (-:) :: (MonadHold t m, Reflex t) => Attr a -> a -> Attributes t m

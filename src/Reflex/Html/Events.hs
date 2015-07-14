@@ -6,6 +6,8 @@ module Reflex.Html.Events
 
 import Data.Functor
 
+import Reflex.Html.Internal.Host
+
 import Reflex.Html.Internal.Events
 import Reflex.Html.Internal.Element
  
@@ -31,7 +33,7 @@ keyup = _on_keyup . toEvents
 scrolled :: IsElement e => e -> Event (T e) Int
 scrolled = _on_scrolled . toEvents
 
-
+  
 
 -- Event binders
 
@@ -45,7 +47,7 @@ blurEvent = liftEvent blurEvent_
 
 
 -- Convenience bindings (used by Input)
-holdFocus :: (MonadWidget (T e) m, IsElement e) => e -> m (Dynamic (T e) Bool)
+holdFocus :: (MonadAppHost (T e) m, IsElement e) => e -> m (Dynamic (T e) Bool)
 holdFocus e = do
   eFocus <- focusEvent [] e
   eBlur <- blurEvent [] e

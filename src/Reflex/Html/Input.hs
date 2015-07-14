@@ -41,11 +41,11 @@ import Reflex.Html.Internal.Element
 import Reflex.Html.Internal.Events
 import Reflex.Html.Internal.Attributes
 import Reflex.Html.Internal.HtmlT
+import Reflex.Html.Internal.Host
 
 import Reflex.Html.Events
 import Reflex.Html.Attributes
 import Reflex.Html.Elements
-
 
   
 -- Value of an element

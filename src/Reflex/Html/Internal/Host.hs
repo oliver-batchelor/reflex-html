@@ -98,9 +98,6 @@ collection newItems = do
         rearrange (a, (b, c)) = ((a, b), c)  
   
   
-
-
-  
 dynamicView :: (MonadAppHost t m) => Event t a -> (Dynamic t a -> m b) -> m (Event t b) 
 dynamicView e view = do
   (first, rest) <- headTailE e  

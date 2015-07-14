@@ -10,8 +10,7 @@ module Reflex.Html
   , runHtml
   , withCss
   
-  , Html
-  
+  , HtmlT
   
   ) where
 
@@ -32,5 +31,5 @@ runHtml :: HtmlT (AppHost Spider) () -> HtmlT (AppHost Spider) () -> IO ()
 runHtml head body = undefined
 
 
-withCss :: String -> Html m ()
+withCss :: String -> HtmlT (AppHost Spider) ()
 withCss = undefined

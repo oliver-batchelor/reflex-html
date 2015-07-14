@@ -90,11 +90,11 @@ buildElement namespace tag attrs child = do
 element' :: MonadAppHost t m =>  Namespace -> Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Element t, a)
 element' ns tag attrs child = do
   (dom, r) <- buildElement ns tag attrs child  
-  events <- bindEvents dom
+  events <- lift $ bindEvents dom
   return (Element dom events, r)
 
 element_ :: MonadAppHost t m => Namespace -> Tag -> Attributes t m ->  HtmlT m a -> HtmlT m a
-element_ ns tag attrs child = snd <$> buildElement tag attrs child  
+element_ ns tag attrs child = snd <$> buildElement ns tag attrs child  
 
 
   

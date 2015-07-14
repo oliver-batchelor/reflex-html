@@ -9,8 +9,8 @@ import Reflex.Html.Internal.Element
 import Reflex.Html.Internal.Attributes
 
 import Reflex.Html.Internal.HtmlT
+import Reflex.Html.Internal.Host
 
-
-empty :: (MonadWidget t m) => HtmlT m ()
+empty :: (MonadAppHost t m) => HtmlT m ()
 empty = return ()  
 
