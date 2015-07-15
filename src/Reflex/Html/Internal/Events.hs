@@ -16,6 +16,7 @@ import qualified GHCJS.DOM.DOMWindow as Dom
 
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Trans
 import Control.Monad.IO.Class
 import Control.Lens
 
@@ -32,7 +33,7 @@ data Events t = Events
   }
 
 
-bindEvents :: MonadAppHost t m => Dom.Element -> m (Events t)
+bindEvents :: MonadAppHost t m => Dom.Element -> HtmlT m (Events t)
 bindEvents dom = Events
       <$> keypressEvent_ [] dom
       <*> keydownEvent_ [] dom
@@ -45,13 +46,13 @@ bindEvents dom = Events
 type EventCallback e event = (e -> Dom.EventM event e () -> IO (IO ()))
  
 domEvent :: (MonadAppHost t m, Dom.IsEvent event, Dom.IsElement e) 
-  => EventCallback e event -> Dom.EventM event e a -> [EventFlag] -> e -> m (Event t a)
+  => EventCallback e event -> Dom.EventM event e a -> [EventFlag] -> e -> HtmlT m (Event t a)
 domEvent elementOnevent getValue  flags element = domEventMaybe elementOnevent (liftM Just getValue) flags element
 
 
 domEventMaybe :: (MonadAppHost t m, Dom.IsEvent event, Dom.IsElement e) => 
-  EventCallback e event -> Dom.EventM event e (Maybe a) -> [EventFlag] -> e -> m (Event t a)
-domEventMaybe  elementOnevent getValue flags element = do
+  EventCallback e event -> Dom.EventM event e (Maybe a) -> [EventFlag] -> e -> HtmlT m (Event t a)
+domEventMaybe  elementOnevent getValue flags element = lift $ do
   fire <- getAsyncFire
   e <- newEventWithTrigger $ \et -> do
         unsubscribe <- liftIO $ elementOnevent element $  do
@@ -76,39 +77,39 @@ applyFlag PreventDefault = Dom.preventDefault
 
   
 --Raw event bindings
-clickedEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+clickedEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  HtmlT m (Event t ())
 clickedEvent_ = domEvent Dom.elementOnclick (return ())
 
-keypressEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element -> m (Event t Int) 
+keypressEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element -> HtmlT m (Event t Int) 
 keypressEvent_ = domEvent Dom.elementOnkeypress  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
 
-keydownEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element  -> m (Event t Int)
+keydownEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element  -> HtmlT m (Event t Int)
 keydownEvent_ = domEvent Dom.elementOnkeydown  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
 
-keyupEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element  -> m (Event t Int)
+keyupEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element  -> HtmlT m (Event t Int)
 keyupEvent_ = domEvent Dom.elementOnkeyup  (liftIO . Dom.uiEventGetKeyCode =<< Dom.event)
 
-scrolledEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element -> m (Event t Int)
+scrolledEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  HtmlT m (Event t Int)
 scrolledEvent_ flags e = domEvent Dom.elementOnscroll (liftIO $ Dom.elementGetScrollTop e) flags e
   
-blurEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+blurEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  HtmlT m (Event t ())
 blurEvent_ = domEvent Dom.elementOnblur (return ())
  
-focusEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+focusEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element -> HtmlT m (Event t ())
 focusEvent_ = domEvent Dom.elementOnfocus (return ()) 
 
 
-changeEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element ->  m (Event t ())
+changeEvent_ :: (MonadAppHost t m) => [EventFlag] -> Dom.Element -> HtmlT m (Event t ())
 changeEvent_ = domEvent Dom.elementOnchange (return ()) 
 
-mouseLocal :: Dom.Element -> Dom.UIEvent -> IO (Int, Int)
-mouseLocal e event = do
-  x <- Dom.uiEventGetLayerX event
-  y <- Dom.uiEventGetLayerY event
-
-  ex <- Dom.elementGetOffsetLeft e
-  ey <- Dom.elementGetOffsetTop e
-  return (x - ex, y - ey)
+-- mouseLocal :: Dom.Element -> Dom.UIEvent -> IO (Int, Int)
+-- mouseLocal e event = do
+--   x <- Dom.uiEventGetLayerX event
+--   y <- Dom.uiEventGetLayerY event
+-- 
+--   ex <- Dom.elementGetOffsetLeft e
+--   ey <- Dom.elementGetOffsetTop e
+--   return (x - ex, y - ey)
   
   
 -- mouseMove_ :: MonadAppHost t m => Dom.Element ->  m (Event t (Int, Int))

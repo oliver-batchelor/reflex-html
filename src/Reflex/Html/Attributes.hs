@@ -42,7 +42,7 @@ width_ = stringAttr "width"
 height_ = stringAttr "height"
 class_ = stringAttr "class"
 href_ = stringAttr "href"
-style_ = stringAttr "style"
+style = stringAttr "style"
 for_ = stringAttr "for"
 visibility_ = stringAttr "visibility"
 name_ = stringAttr "name"
@@ -75,4 +75,4 @@ toggleA ::  String -> Attr String -> Attr Bool
 toggleA str (Attr k m) = Attr k ((>>= m) . toMaybe str) 
 
 styleHidden :: Attr Bool
-styleHidden = toggleA "visibility:hidden" style_ 
+styleHidden = toggleA "visibility:hidden" style

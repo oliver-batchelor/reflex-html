@@ -41,21 +41,21 @@ liftM concat $ mapM makeLenses
   [ ''ElementConfig
   ]   
   
-class HasReflex r where
+class Reflex (T r) => HasReflex r where
   type T r :: * 
   
-instance HasReflex (Element t) where
+instance Reflex t => HasReflex (Element t) where
   type T (Element t) = t 
 
   
-instance HasReflex (ElementConfig t m) where
+instance Reflex t => HasReflex (ElementConfig t m) where
   type T (ElementConfig t m) = t 
   
   
 class HasReflex e => IsElement e  where
   toElement ::  e -> Element (T e)
   
-instance IsElement (Element t) where
+instance Reflex t => IsElement (Element t) where
   toElement = id
   
 
@@ -80,19 +80,15 @@ buildEmptyElement :: MonadAppHost t m => String -> String -> Attributes t m -> H
 buildEmptyElement namespace elementTag attrs = do
   doc <- askDocument
   p <- askParent
-
+  
   Just dom <- liftIO $ Dom.documentCreateElementNS doc namespace elementTag  
   lift $ mapM_ (addAttribute dom) (flattenA attrs)
   void $ liftIO $ Dom.nodeAppendChild p $ Just dom
 
   return $ Dom.castToElement dom  
-  
- 
-      
+
 domElement :: IsElement e => e -> Dom.Element
 domElement = _element_element . toElement 
-
-
  
 buildElement :: MonadAppHost t m => Namespace -> Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Dom.Element, a)
 buildElement namespace tag attrs child = do
@@ -104,7 +100,7 @@ buildElement namespace tag attrs child = do
 element' :: MonadAppHost t m =>  Namespace -> Tag -> Attributes t m -> HtmlT m a -> HtmlT m (Element t, a)
 element' ns tag attrs child = do
   (dom, r) <- buildElement ns tag attrs child  
-  events <- lift $ bindEvents dom
+  events <- bindEvents dom
   return (Element dom events, r)
 
 element_ :: MonadAppHost t m => Namespace -> Tag -> Attributes t m ->  HtmlT m a -> HtmlT m a
@@ -120,9 +116,26 @@ el (ElementConfig ns tag attrs) child = element_ ns tag attrs child
 el' :: MonadAppHost t m => ElementConfig t m -> HtmlT m a -> HtmlT m (Element t, a)
 el' (ElementConfig ns tag attrs) child = element' ns tag attrs child
 
+
+text' :: MonadAppHost t m => String -> HtmlT m Dom.Text
+text' str = do
+  doc <- askDocument
+  p <- askParent
+  Just n <- liftIO $ Dom.documentCreateTextNode doc str
+  _ <- liftIO $ Dom.nodeAppendChild p $ Just n
+  return n
+
+dynText :: (MonadAppHost t m) => Dynamic t String -> HtmlT m ()
+dynText d = do
+  n <- text' ""
+  lift $ schedulePostBuild_ $ do
+    str <- sample $ current d
+    liftIO $ Dom.nodeSetNodeValue n str
+  lift $ performEvent_ $ fmap (liftIO . Dom.nodeSetNodeValue n) $ updated d  
+
   
 -- lift an event binding from one which works on a Dom.Element to one working on an Element
-liftEvent :: IsElement e => ([EventFlag] -> Dom.Element ->  m (Event (T e) a)) ->  
-              [EventFlag] -> e ->  m (Event (T e) a)
+liftEvent :: IsElement e => ([EventFlag] -> Dom.Element -> HtmlT m (Event (T e) a)) ->  
+              [EventFlag] -> e -> HtmlT m (Event (T e) a)
 liftEvent binding flags e = binding flags (domElement e) 
 

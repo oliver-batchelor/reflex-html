@@ -6,13 +6,13 @@ module Reflex.Html.Input
   , HasValue (..), HasSetValue (..)
   , HasFocus (..), HasSetFocus (..)
   
---   , textInput
---   , textArea
---   
---   , checkboxView
---   , checkboxInput
---   
---   , selectInput
+  , textInput
+  , textArea
+  
+  , checkboxView
+  , checkboxInput
+  
+  , selectInput
   
   )
   where
@@ -20,6 +20,7 @@ module Reflex.Html.Input
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Lens
 import Data.Maybe
 import Data.List
@@ -88,24 +89,24 @@ liftM concat $ mapM makeLenses
   
 
 -- Input instances
-instance HasReflex (Input t a) where
+instance Reflex t => HasReflex (Input t a) where
   type T (Input t a) = t
   
-instance HasReflex (InputConfig t a) where
+instance Reflex t =>  HasReflex (InputConfig t a) where
   type T (InputConfig t a) = t
   
                
-instance HasValue (Input t a) where
+instance Reflex t => HasValue (Input t a) where
   type Value (Input t a) = a
   value = _input_value
   changed = _input_changed
                  
                  
                  
-instance IsElement (Input t a) where
+instance Reflex t => IsElement (Input t a) where
   toElement = _input_element
   
-instance HasFocus (Input t a) where
+instance Reflex t => HasFocus (Input t a) where
   hasFocus = _input_hasFocus  
                       
 instance (Reflex t, Default a) => Default (InputConfig t a) where
@@ -114,37 +115,36 @@ instance (Reflex t, Default a) => Default (InputConfig t a) where
                         , _inputConfig_setFocus = never
                         }                      
                         
-instance HasSetValue (InputConfig t a) where
+instance Reflex t => HasSetValue (InputConfig t a) where
   type SetValue (InputConfig t a) = a
   setValue     = inputConfig_setValue
   initialValue = inputConfig_initialValue 
   
-instance HasSetFocus (InputConfig t a) where
+instance Reflex t => HasSetFocus (InputConfig t a) where
   setFocus = inputConfig_setFocus 
   
 
   
-{-
                
-inputElement :: MonadWidget t m => String -> Attributes t m -> HtmlT p m (Element Input_ t)
+inputElement :: MonadAppHost t m => String -> Attributes t m -> HtmlT m (Element t)
 inputElement inputType attrs  = fst <$> input' attrs' (return ())
   where attrs' = overrideA (type_ -: inputType) $  attrs
         
 
-setFocus_ :: MonadWidget t m => Element t -> Event t Bool -> m ()
-setFocus_ e eSetFocus = performEvent_ $ ffor eSetFocus $ \focus -> liftIO $ if focus 
+setFocus_ :: MonadAppHost t m => Element t -> Event t Bool -> HtmlT m ()
+setFocus_ e eSetFocus = lift $ performEvent_ $ ffor eSetFocus $ \focus -> liftIO $ if focus 
       then Dom.elementFocus (domElement e)
       else Dom.elementBlur (domElement e)        
         
         
-inputEvent_ :: (MonadWidget t m, Dom.IsElement e) =>  e -> (e -> IO a) -> m (Event t a)
-inputEvent_ e f = wrapEvent Dom.elementOninput (liftIO $ f e) [] e 
+inputEvent_ :: (MonadAppHost t m, Dom.IsElement e) =>  e -> (e -> IO a) -> HtmlT m (Event t a)
+inputEvent_ e f = domEvent Dom.elementOninput (liftIO $ f e) [] e 
 
 
-makeInput_ :: (MonadWidget t m, Dom.IsElement e) => (Dom.Element -> e) -> (e -> a -> IO ()) -> (e -> IO a) -> InputConfig t a -> Element tag t ->  m (Input tag t a)
+makeInput_ :: (MonadAppHost t m, Dom.IsElement e) => (Dom.Element -> e) -> (e -> a -> IO ()) -> (e -> IO a) -> InputConfig t a -> Element t ->  HtmlT m (Input t a)
 makeInput_ cast setter getter (InputConfig initial eSetValue eSetFocus) e = do
   liftIO $ setter dom initial
-  performEvent_ $ liftIO . setter dom  <$> eSetValue
+  lift $ performEvent_ $ liftIO . setter dom  <$> eSetValue
   eChanged <- inputEvent_ dom getter
   setFocus_ e eSetFocus 
   dFocus <- holdFocus e
@@ -154,43 +154,41 @@ makeInput_ cast setter getter (InputConfig initial eSetValue eSetFocus) e = do
     dom = cast $ domElement e
 
 
-textInput :: MonadWidget t m => Attributes t m -> InputConfig String t -> HtmlT p m (Input String t)
+textInput :: MonadAppHost t m => Attributes t m -> InputConfig t String -> HtmlT m (Input t String)
 textInput attrs config  =  do
   e <- inputElement "text" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetValue Dom.htmlInputElementGetValue config e
   
              
-textArea :: MonadWidget t m => Attributes t m -> InputConfig String t -> HtmlT p m (Input String t)
-textArea attrs config = textArea' attrs (return ()) >>= \(e, _) ->  do
+textArea :: MonadAppHost t m => Attributes t m -> InputConfig t String -> HtmlT m (Input t String)
+textArea attrs config = textarea' attrs (return ()) >>= \(e, _) ->  do
   makeInput_ Dom.castToHTMLTextAreaElement Dom.htmlTextAreaElementSetValue Dom.htmlTextAreaElementGetValue config e        
              
              
 -- Checkbox
-
-checkboxView :: MonadWidget t m => Attributes t m -> Dynamic t Bool -> HtmlT p m (Event t Bool)
+checkboxView :: MonadAppHost t m => Attributes t m -> Dynamic t Bool -> HtmlT m (Event t Bool)
 checkboxView attrs dValue = do
   e <- inputElement "checkbox" attrs 
   let dom = Dom.castToHTMLInputElement $ domElement e
-  eClicked <- wrapEvent Dom.elementOnclick (liftIO $ Dom.htmlInputElementGetChecked dom) [PreventDefault] (domElement e)  
-  schedulePostBuild $ do
+  eClicked <- domEvent Dom.elementOnclick (liftIO $ Dom.htmlInputElementGetChecked dom) [PreventDefault] (domElement e)  
+  lift $ schedulePostBuild_ $ do
     v <- sample $ current dValue
     when v $ liftIO $ Dom.htmlInputElementSetChecked dom True
-  performEvent_ $ fmap (\v -> liftIO $ Dom.htmlInputElementSetChecked dom $! v) $ updated dValue
+  lift $ performEvent_ $ fmap (\v -> liftIO $ Dom.htmlInputElementSetChecked dom $! v) $ updated dValue
   return eClicked          
   
 
   
-checkboxInput :: MonadWidget t m => Attributes t m -> InputConfig Bool t -> HtmlT p m (Input Bool t)
+checkboxInput :: MonadAppHost t m => Attributes t m -> InputConfig t Bool -> HtmlT m (Input t Bool)
 checkboxInput attrs config  = do
   e <- inputElement "checkbox" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetChecked Dom.htmlInputElementGetChecked config e
   
   
-selectInput :: (MonadWidget t m) => Attributes t m -> InputConfig String t -> HtmlT c m a -> HtmlT p m (Input String t, a)
+selectInput :: (MonadAppHost t m) => Attributes t m -> InputConfig t String -> HtmlT m a -> HtmlT m (Input t String, a)
 selectInput attrs  config child = do
   (e, a) <- select' attrs $ child
   input <- makeInput_ Dom.castToHTMLSelectElement Dom.htmlSelectElementSetValue Dom.htmlSelectElementGetValue config e
   return (input, a)
  
   
-  -}

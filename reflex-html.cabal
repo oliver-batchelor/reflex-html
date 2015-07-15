@@ -1,5 +1,5 @@
 name:                reflex-html
-version:             0.1
+version:             0.1.1
 synopsis:            HTML DSL for reflex-dom
 description:
 license:             BSD3
@@ -26,7 +26,8 @@ library
     Reflex.Html.Internal.Events,
     Reflex.Html.Internal.HtmlT,
     Reflex.Html.Internal.Host,
-    Reflex.Html.Internal.Util
+    Reflex.Html.Internal.Util,
+    Reflex.Html.Internal.WebView
     
   
   hs-source-dirs: src
@@ -48,6 +49,20 @@ library
     semigroups,
     reducers,
     dependent-sum
+    
+  if impl(ghcjs)
+    hs-source-dirs: src-ghcjs
+    cpp-options: -D__GHCJS__
+    build-depends:
+      ghcjs-base
+  else
+    hs-source-dirs: src-ghc
+    build-depends:
+      glib == 0.13.*,
+      gtk3 == 0.13.*,
+      webkitgtk3 == 0.13.*,
+      webkitgtk3-javascriptcore == 0.13.*,
+      directory
     
   default-language: Haskell2010  
   default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, TupleSections, EmptyDataDecls, RecursiveDo, ScopedTypeVariables, 

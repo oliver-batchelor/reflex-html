@@ -2,6 +2,8 @@ module Reflex.Html.Elements
   ( module Reflex.Html.Elements
   , Element  
   , IsElement (..)
+  , dynText
+  
   )
   where
 
@@ -11,6 +13,7 @@ import Reflex.Html.Internal.Attributes
 import Reflex.Html.Internal.HtmlT
 import Reflex.Html.Internal.Host
 import Control.Lens
+import Control.Monad
 
 empty :: (MonadAppHost t m) => HtmlT m ()
 empty = return ()  
@@ -32,6 +35,11 @@ htmlDef tag = ElementConfig
   , _tagName      = tag
   , _attributes   = mempty
   }
+  
+
+text :: MonadAppHost t m => String -> HtmlT m ()
+text = void . text'
+
  
 headDef       = htmlDef "head"          
 titleDef      = htmlDef "title"           
@@ -145,7 +153,7 @@ title_      = elWith titleDef
 base_       = elWith baseDef          
 link_       = elWith linkDef          
 meta_       = elWith metaDef          
-stylesheet_ = elWith styleDef           
+style_ = elWith styleDef           
 
 script_     = elWith scriptDef            
 noscript_   = elWith noscriptDef              

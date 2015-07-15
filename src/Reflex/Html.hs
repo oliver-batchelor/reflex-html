@@ -7,6 +7,8 @@ module Reflex.Html
   , module Reflex.Html.Input
   , module Reflex.Html.KeyCodes
   
+  , MonadAppHost
+  
   , runHtml
   , withCss
   
@@ -24,12 +26,10 @@ import Reflex.Html.KeyCodes
 
 import Reflex.Html.Internal.HtmlT
 
-import Data.ByteString (ByteString)
+import Data.ByteString.Char8 (ByteString)
+import qualified Data.ByteString.Char8 as B
+  
+  
 
-
-runHtml :: HtmlT (AppHost Spider) () -> HtmlT (AppHost Spider) () -> IO ()
-runHtml head body = undefined
-
-
-withCss :: String -> HtmlT (AppHost Spider) ()
-withCss = undefined
+withCss :: MonadAppHost t m => ByteString -> HtmlT m ()
+withCss css = style_ mempty $ text (B.unpack css)
