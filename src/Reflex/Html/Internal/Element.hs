@@ -9,12 +9,14 @@ import qualified GHCJS.DOM.Element  as Dom
 import qualified GHCJS.DOM.Node  as Dom
 
 import Data.Proxy
+import Data.Functor.Misc
 
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Lens
 import Control.Monad.Trans
+
 
 import Reflex.Html.Internal.Attributes
 import Reflex.Html.Internal.Events
@@ -58,7 +60,13 @@ class HasReflex e => IsElement e  where
 instance Reflex t => IsElement (Element t) where
   toElement = id
   
+  
+class HasDomEvent t a where
+  domEvent :: EventName en -> a -> Event t (EventResultType en)
 
+instance Reflex t => HasDomEvent t (Element t) where
+  domEvent en e = unEventResult <$> select (_element_events e) (WrapArg en)
+  
 
 addAttribute :: (MonadAppHost t m, Dom.IsElement e) => e -> (Key, ValueA t m) -> m ()
 addAttribute dom (k, StaticA mStr) = liftIO $ forM_ mStr $ Dom.elementSetAttribute dom k

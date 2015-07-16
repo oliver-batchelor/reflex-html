@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableInstances, ImpredicativeTypes #-}
 
 module Reflex.Html.Internal.HtmlT where
 

@@ -23,6 +23,7 @@ library
   other-modules: 
     Reflex.Html.Internal.Attributes,
     Reflex.Html.Internal.Element,
+    Reflex.Html.Internal.ElementEvents,
     Reflex.Html.Internal.Events,
     Reflex.Html.Internal.HtmlT,
     Reflex.Html.Internal.Host,
@@ -48,7 +49,9 @@ library
     singletons,
     semigroups,
     reducers,
-    dependent-sum
+    dependent-sum,
+    dependent-sum-template >= 0.0.0.4 && < 0.1,
+    bifunctors
     
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs

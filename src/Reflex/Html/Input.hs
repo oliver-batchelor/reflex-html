@@ -2,7 +2,7 @@
 
 module Reflex.Html.Input 
   (  def, (&), (.~)
-  , Input, InputConfig
+  , InputElement, InputConfig
   , HasValue (..), HasSetValue (..)
   , HasFocus (..), HasSetFocus (..)
   
@@ -68,45 +68,46 @@ class HasReflex c => HasSetFocus c where
   setFocus :: Lens' c (Event (T c) Bool)    
   
  
-data Input t a = Input { _input_value :: Dynamic t a
-               , _input_changed :: Event t a
-               , _input_hasFocus :: Dynamic t Bool
-               , _input_element :: Element t 
-               }
+data InputElement t a = InputElement 
+    { _input_value :: Dynamic t a
+    , _input_changed :: Event t a
+    , _input_hasFocus :: Dynamic t Bool
+    , _input_element :: Element t 
+    }
                
-data InputConfig t a
-    = InputConfig { _inputConfig_initialValue :: a
-                  , _inputConfig_setValue :: Event t a
-                  , _inputConfig_setFocus :: Event t Bool
-                  }          
+data InputConfig t a = InputConfig 
+    { _inputConfig_initialValue :: a
+    , _inputConfig_setValue :: Event t a
+    , _inputConfig_setFocus :: Event t Bool
+    }          
   
                       
 liftM concat $ mapM makeLenses
   [ ''InputConfig
-  , ''Input
+  , ''InputElement
   , ''Element
   ]      
   
 
--- Input instances
-instance Reflex t => HasReflex (Input t a) where
-  type T (Input t a) = t
+-- InputElement instances
+instance Reflex t => HasReflex (InputElement t a) where
+  type T (InputElement t a) = t
   
 instance Reflex t =>  HasReflex (InputConfig t a) where
   type T (InputConfig t a) = t
   
                
-instance Reflex t => HasValue (Input t a) where
-  type Value (Input t a) = a
+instance Reflex t => HasValue (InputElement t a) where
+  type Value (InputElement t a) = a
   value = _input_value
   changed = _input_changed
                  
                  
                  
-instance Reflex t => IsElement (Input t a) where
+instance Reflex t => IsElement (InputElement t a) where
   toElement = _input_element
   
-instance Reflex t => HasFocus (Input t a) where
+instance Reflex t => HasFocus (InputElement t a) where
   hasFocus = _input_hasFocus  
                       
 instance (Reflex t, Default a) => Default (InputConfig t a) where
@@ -136,31 +137,32 @@ setFocus_ e eSetFocus = lift $ performEvent_ $ ffor eSetFocus $ \focus -> liftIO
       then Dom.elementFocus (domElement e)
       else Dom.elementBlur (domElement e)        
         
-        
-inputEvent_ :: (MonadAppHost t m, Dom.IsElement e) =>  e -> (e -> IO a) -> HtmlT m (Event t a)
-inputEvent_ e f = domEvent Dom.elementOninput (liftIO $ f e) [] e 
 
 
-makeInput_ :: (MonadAppHost t m, Dom.IsElement e) => (Dom.Element -> e) -> (e -> a -> IO ()) -> (e -> IO a) -> InputConfig t a -> Element t ->  HtmlT m (Input t a)
+
+
+makeInput_ :: (MonadAppHost t m, Dom.IsElement dom) => (Dom.Element -> dom) -> (dom -> a -> IO ()) -> (dom -> IO a) 
+              -> InputConfig t a -> Element t ->  HtmlT m (InputElement t a)
 makeInput_ cast setter getter (InputConfig initial eSetValue eSetFocus) e = do
   liftIO $ setter dom initial
   lift $ performEvent_ $ liftIO . setter dom  <$> eSetValue
-  eChanged <- inputEvent_ dom getter
+  eChanged <- lift $ performEvent $ liftIO (getter dom) <$ domEvent Input e
+  
   setFocus_ e eSetFocus 
   dFocus <- holdFocus e
   dValue <- holdDyn initial $ leftmost [eSetValue, eChanged]
-  return $ Input dValue eChanged dFocus e 
+  return $ InputElement dValue eChanged dFocus e 
   where
     dom = cast $ domElement e
 
 
-textInput :: MonadAppHost t m => Attributes t m -> InputConfig t String -> HtmlT m (Input t String)
+textInput :: MonadAppHost t m => Attributes t m -> InputConfig t String -> HtmlT m (InputElement t String)
 textInput attrs config  =  do
   e <- inputElement "text" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetValue Dom.htmlInputElementGetValue config e
   
              
-textArea :: MonadAppHost t m => Attributes t m -> InputConfig t String -> HtmlT m (Input t String)
+textArea :: MonadAppHost t m => Attributes t m -> InputConfig t String -> HtmlT m (InputElement t String)
 textArea attrs config = textarea' attrs (return ()) >>= \(e, _) ->  do
   makeInput_ Dom.castToHTMLTextAreaElement Dom.htmlTextAreaElementSetValue Dom.htmlTextAreaElementGetValue config e        
              
@@ -170,22 +172,25 @@ checkboxView :: MonadAppHost t m => Attributes t m -> Dynamic t Bool -> HtmlT m 
 checkboxView attrs dValue = do
   e <- inputElement "checkbox" attrs 
   let dom = Dom.castToHTMLInputElement $ domElement e
-  eClicked <- domEvent Dom.elementOnclick (liftIO $ Dom.htmlInputElementGetChecked dom) [PreventDefault] (domElement e)  
+
   lift $ schedulePostBuild_ $ do
     v <- sample $ current dValue
     when v $ liftIO $ Dom.htmlInputElementSetChecked dom True
+    
+  --TODO: Need to preventDefault to avoid a loop
+  click <- lift $ performEvent $ liftIO (Dom.htmlInputElementGetChecked dom) <$ clicked e
   lift $ performEvent_ $ fmap (\v -> liftIO $ Dom.htmlInputElementSetChecked dom $! v) $ updated dValue
-  return eClicked          
+  return click          
   
 
   
-checkboxInput :: MonadAppHost t m => Attributes t m -> InputConfig t Bool -> HtmlT m (Input t Bool)
+checkboxInput :: MonadAppHost t m => Attributes t m -> InputConfig t Bool -> HtmlT m (InputElement t Bool)
 checkboxInput attrs config  = do
   e <- inputElement "checkbox" attrs 
   makeInput_ Dom.castToHTMLInputElement Dom.htmlInputElementSetChecked Dom.htmlInputElementGetChecked config e
   
   
-selectInput :: (MonadAppHost t m) => Attributes t m -> InputConfig t String -> HtmlT m a -> HtmlT m (Input t String, a)
+selectInput :: (MonadAppHost t m) => Attributes t m -> InputConfig t String -> HtmlT m a -> HtmlT m (InputElement t String, a)
 selectInput attrs  config child = do
   (e, a) <- select' attrs $ child
   input <- makeInput_ Dom.castToHTMLSelectElement Dom.htmlSelectElementSetValue Dom.htmlSelectElementGetValue config e
