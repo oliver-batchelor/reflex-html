@@ -18,7 +18,8 @@ library
     Reflex.Html.Events,
     Reflex.Html.Input,
     Reflex.Html.Attributes,
-    Reflex.Html.KeyCodes
+    Reflex.Html.KeyCodes,
+    Reflex.Html.Collection
     
   other-modules: 
     Reflex.Html.Internal.Attributes,
@@ -26,9 +27,11 @@ library
     Reflex.Html.Internal.ElementEvents,
     Reflex.Html.Internal.Events,
     Reflex.Html.Internal.HtmlT,
-    Reflex.Html.Internal.Host,
     Reflex.Html.Internal.Util,
-    Reflex.Html.Internal.WebView
+    Reflex.Html.Internal.WebView,
+    Reflex.Html.Internal.Collection,
+    Reflex.Html.Internal.Host
+
     
   
   hs-source-dirs: src

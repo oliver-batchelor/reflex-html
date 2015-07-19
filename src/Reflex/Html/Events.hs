@@ -22,8 +22,6 @@ clicked = domEvent Click
 focused = domEvent Focus
 blur = domEvent Blur
 
-   
-
 
 -- Convenience bindings (used by Input)
 holdFocus :: (HasDomEvent t e, MonadAppHost t m) => e -> HtmlT m (Dynamic t Bool)

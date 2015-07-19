@@ -4,10 +4,11 @@ module Reflex.Html.Internal.Host
   , module Reflex.Host.Class
   , module Data.Dependent.Sum
   
-  , collect, collection
-  , dynamicView, indexedView
-  
-  , schedulePostBuild_
+  , module Reflex.Html.Internal.Host 
+--   , collect, collection
+--   , dynamicView, indexedView
+--   
+--   , schedulePostBuild_
   
   ) where
 
@@ -20,7 +21,9 @@ import Reflex.Host.App.Internal
 import Reflex.Html.Internal.Util
 
 import Data.Maybe
+
 import Data.Monoid
+
 import Data.Map (Map)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Semigroup.Applicative
@@ -35,29 +38,8 @@ import Control.Monad.IO.Class
 import Control.Monad
 import Control.Monad.Fix
 
-
--- -- | Run a HostFrame action in the post build and fire it's event
--- -- | in the next frame. Typical use is sampling from Dynamics/Behaviors
--- -- | and providing the result in an Event more convenient to use.
--- performPostBuild ::  (MonadAppHost t m) => HostFrame t a -> m (Event t a)
--- performPostBuild action = do
---   (event, construct) <- newEventWithConstructor  
---   performPostBuild_ $ do
---     a <- action
---     pure $ infoFire $ liftIO (F.foldMap pure <$> construct a)
---   return event  
--- 
--- -- | Provide an event which is triggered in the next frame.
--- getPostBuild :: (MonadAppHost t m) =>  m (Event t ())
--- getPostBuild  = performPostBuild (return ())  
--- 
--- 
--- -- | Run some IO asynchronously in another thread and return it as an Event
--- performEventAsync :: MonadAppHost t m => Event t (IO a) -> m (Event t a)
--- performEventAsync event = do
---   (result, fire) <- newExternalEvent
---   performEvent_ $ void . liftIO . forkIO .  (void . fire =<<) <$> event
---   return result 
+  
+type Actions t = HostFrame t (AppInfo t) 
   
   
 schedulePostBuild_ ::  (MonadAppHost t m) => HostFrame t () -> m ()
@@ -86,43 +68,72 @@ collect newItems = do
   pure $ fmap fst <$> updated itemDyn  
   
 
-collection :: MonadAppHost t m => Event t [m (a, Event t ())] -> m (Event t [a])
-collection newItems = do
+switchActions :: (MonadAppHost t m, Functor f, Foldable f) => Event t (f (HostFrame t (AppInfo t))) -> m ()
+switchActions info = void $ performAppHost $ performPostBuild_ <$> getApp . foldMap id . fmap Ap <$> info
+
+  
+hostCollection :: MonadAppHost t m => Event t [m (a, Event t ())] -> m (Event t [a])
+hostCollection newItems = do
     runAppHost <- getRunAppHost
     newViews <- performEvent $ mapM runAppHost <$> newItems
-    (info, results) <- splitE . (fmap unzip) <$> collect (fmap rearrange <$> newViews)        
-    performAppHost $ performPostBuild_ <$>
-      getApp . mconcat . fmap Ap <$> info
-    
-    pure results
+    (info, results) <- splitE . fmap unzip <$> collect (fmap rearrange <$> newViews) 
+    results <$ switchActions info    
       where
         rearrange (a, (b, c)) = ((a, b), c)  
+ 
   
-  
-dynamicView :: (MonadAppHost t m) => Event t a -> (Dynamic t a -> m b) -> m (Event t b) 
+dynamicView :: (MonadAppHost t m) => Event t a -> (Dynamic t a -> m (Event t b)) -> m (Event t b) 
 dynamicView e view = do
   (first, rest) <- headTailE e  
-  performAppHost $ ffor first $ \v -> do
+  r <- performAppHost $ ffor first $ \v -> do
     holdDyn v rest >>= view
+  switchPromptly never r 
   
   
-indexedView ::  (MonadAppHost t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
-indexedView itemsDyn itemView = do  
+
+-- data Diff a = Added a | Removed a
+-- 
+--   
+-- diffMapHost :: (MonadAppHost t m, Ord k) => Event t (Map k (m a)) -> m (Dynamic t (Map k a), Event t (Map k (Diff a)))
+-- diffMapHost input  = do
+--   runAppHost <- getRunAppHost  
+--   rec
+--     viewsDyn <- foldDyn ($) mempty $ mergeWith (.) $ 
+--       [ mappend       <$> newViews 
+--       , flip (Map.\\) <$> removedViews
+--       ]
+--       
+--     removedViews <- performEvent $ return <$> diffWith (Map.\\)  (current viewsDyn) input
+--     newViews     <- performEvent $ mapM runAppHost <$> diffWith (flip (Map.\\)) (current viewsDyn) input
+--     
+--   switchActions $ fmap fst <$> updated viewsDyn  
+--   valuesDyn <- mapDyn (fmap snd) viewsDyn
+--    
+--   return $ (valuesDyn, appendEvents (fmap (Added . snd) <$> newViews) (fmap (Removed . snd) <$> removedViews))
+--     where 
+--       diffWith f curr next = ffilter (not . Map.null) $ attachWith f curr next
+--   
+-- 
+-- newKeys :: (Reflex t, Ord k) => Dynamic t (Map k a) -> Event t (Map k a)
+-- newKeys d = ffilter (not . Map.null) $ 
+--   attachWith (flip Map.difference) (current d) (updated d)  
+  
+  {-
+hostIndexedView ::  (MonadAppHost t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v -> m a) -> m (Dynamic t (Map k a))
+hostIndexedView itemsDyn itemView = do  
   items <- dynamicEvents itemsDyn
-  updatedViews <- collection $ (fmap runItem . Map.toList) <$> items
+  updatedViews <- hostCollection $ (fmap runItem . Map.toList <$> newKeys itemsDyn)
   holdDyn mempty (Map.fromList <$> updatedViews)
   
   where
-    newItems = attachWith (flip Map.difference) (current itemsDyn) (updated itemsDyn)
     runItem (k, v) = do 
       valueDyn <- holdDyn v $ fmapMaybe id updatedValue
       r <- itemView k valueDyn
       pure ((k, r), removed)
         where
           updatedValue = Map.lookup k <$> updated itemsDyn
-          removed = () <$ ffilter isNothing updatedValue
+          removed = void $ ffilter isNothing updatedValue-}
 
   
   
-
   

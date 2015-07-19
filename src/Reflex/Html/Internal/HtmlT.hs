@@ -14,7 +14,6 @@ import qualified GHCJS.DOM.Document as Dom
 import qualified GHCJS.DOM.HTMLElement as Dom
 import qualified GHCJS.DOM.Types as Dom
 
-
 import Control.Monad.Reader
 import Control.Monad.Exception
 import Control.Concurrent
@@ -32,6 +31,11 @@ newtype HtmlT m a = HtmlT { unHtmlT :: ReaderT Env m a } deriving (Functor, Appl
 
 runHtmlT :: MonadAppHost t m => Dom.Document -> Dom.Node -> HtmlT m a -> m a
 runHtmlT doc root html = runReaderT (unHtmlT html) (Env doc root)
+
+askRunHtmlT :: (MonadAppHost t m) =>  HtmlT m (HtmlT m a -> m a)
+askRunHtmlT = do
+  (Env doc parent) <- HtmlT $ ask
+  pure $ runHtmlT doc parent
   
 
 askDocument :: MonadAppHost t m => HtmlT m Dom.Document
@@ -45,26 +49,18 @@ localChild node  = HtmlT . local reParent . unHtmlT
   where reParent env = env {_env_parent = node}
 
   
-runInFragment :: MonadAppHost t m => HtmlT m a -> HtmlT m a
-runInFragment child = do
-  parent <- askParent
-  doc <- askDocument
-  
-  Just df <- liftIO $ Dom.documentCreateDocumentFragment doc
-  r <- localChild (Dom.toNode df) $ child
-  liftIO $ Dom.nodeAppendChild parent $ Just df
-  return r
+
   
 
 attachRoot :: MonadAppHost t m => Dom.Document -> Dom.HTMLElement -> HtmlT m () -> m ()
 attachRoot doc root child = do  
   liftIO $ Dom.htmlElementSetInnerHTML root ""
-  runHtmlT doc (Dom.toNode root) $ 
-    runInFragment child
-
+  void $ runHtmlT doc (Dom.toNode root) $ do
+    (_, df) <- runInFragment child
+    liftIO $ Dom.nodeAppendChild (Dom.toNode root) $ Just df
     
     
-
+ 
       
 runHtml :: HtmlT (AppHost Spider) () -> HtmlT (AppHost Spider) () -> IO ()
 runHtml head body =  liftIO $ runWebGUI $ \webView -> do
@@ -78,21 +74,21 @@ runHtml head body =  liftIO $ runWebGUI $ \webView -> do
   
   forM_ appState $ \(chan, step) -> void . liftIO . forkIO . forever $ do 
     liftIO (readChan chan) >>= Dom.postGUISync . runSpiderHost . step 
-    
---     
---   runStep = do 
---       nextInput <- liftIO (readChan chan)
---       step nextInput >>= flip when runStep
---   runStep
---   
---   void . liftIO . forkIO $ do
---     forM_ maybeStep $ \step -> do
---       nextInput <- liftIO (readChan chan)
---       Dom.postGUISync . runSpiderHost . runMaybeT $ step nextInput
-
  
---   void $ forkIO $ runSpiderHost $ hostApp $ do
+ 
+runInFragment :: MonadAppHost t m => HtmlT m a -> HtmlT m (a, Dom.DocumentFragment)
+runInFragment child = do
+  doc <- askDocument
+  
+  Just df <- liftIO $ Dom.documentCreateDocumentFragment doc
+  r <- localChild (Dom.toNode df) $ child
+  return (r, df)
+  
 
 
+  
+  
+
+  
     
     
