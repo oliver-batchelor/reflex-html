@@ -1,6 +1,6 @@
 module Reflex.Html.Events 
   ( module Reflex.Html.Events
-  , module Reflex.Html.Internal.ElementEvents 
+  , module Reflex.Html.Internal.DomEvents 
   , EventFlag(..)
   ) 
   where
@@ -11,7 +11,7 @@ import Reflex.Html.Internal.Host
 import Reflex.Html.Internal.HtmlT
 
 import Reflex.Html.Internal.Events
-import Reflex.Html.Internal.ElementEvents
+import Reflex.Html.Internal.DomEvents
 
 import Reflex.Html.Internal.Element
  
@@ -21,6 +21,8 @@ import Reflex.Html.Internal.Element
 clicked = domEvent Click
 focused = domEvent Focus
 blur = domEvent Blur
+keypress = domEvent Keypress
+keydown = domEvent Keydown
 
 
 -- Convenience bindings (used by Input)

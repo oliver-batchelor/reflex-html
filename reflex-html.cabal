@@ -19,12 +19,14 @@ library
     Reflex.Html.Input,
     Reflex.Html.Attributes,
     Reflex.Html.KeyCodes,
-    Reflex.Html.Collection
+    Reflex.Html.Collection,
+    Reflex.Html.Time
+
     
   other-modules: 
     Reflex.Html.Internal.Attributes,
     Reflex.Html.Internal.Element,
-    Reflex.Html.Internal.ElementEvents,
+    Reflex.Html.Internal.DomEvents,
     Reflex.Html.Internal.Events,
     Reflex.Html.Internal.HtmlT,
     Reflex.Html.Internal.Util,
@@ -32,7 +34,6 @@ library
     Reflex.Html.Internal.Collection,
     Reflex.Html.Internal.Host
 
-    
   
   hs-source-dirs: src
   build-depends:
@@ -49,12 +50,14 @@ library
     safe,
     exception-transformers,
     bytestring,
+    text,
     singletons,
     semigroups,
     reducers,
     dependent-sum,
     dependent-sum-template >= 0.0.0.4 && < 0.1,
-    bifunctors
+    bifunctors,
+    time
     
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs

@@ -69,7 +69,8 @@ mergeListDyn dyns = do
   
   
 concatValues :: (Reflex t, MonadHold t m) => [ValueA t m] -> ValueA t m
-concatValues values = case dynamic of
+concatValues [value] = value
+concatValues values  = case dynamic of
   [] -> StaticA $ joinStrs static
   d  -> DynamicA $ do
     values <- sequence d >>= mergeListDyn
@@ -79,7 +80,9 @@ concatValues values = case dynamic of
     static  = catMaybes $ map (^? staticValue) values
     dynamic = catMaybes $ map (^? dynValue) values
   
-    joinStrs = Just . intercalate " " . catMaybes
+    joinStrs strs = case catMaybes strs of 
+        [] -> Nothing
+        xs -> Just (intercalate " " xs)
 
   
 data Attr a = Attr { 

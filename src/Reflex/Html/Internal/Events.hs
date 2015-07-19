@@ -1,11 +1,11 @@
 module Reflex.Html.Internal.Events 
   ( module Reflex.Html.Internal.Events
-  , module Reflex.Html.Internal.ElementEvents   
+  , module Reflex.Html.Internal.DomEvents   
   ) where
 
 import Reflex.Html.Internal.HtmlT
 import Reflex.Html.Internal.Host
-import Reflex.Html.Internal.ElementEvents
+import Reflex.Html.Internal.DomEvents
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Document as Dom
@@ -71,6 +71,8 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Click         -> return ()
   Dblclick      -> return ()
   Keypress      -> getKeyEvent
+  Keydown       -> getKeyEvent
+  
   Scroll        -> liftIO $ Dom.elementGetScrollTop e
   Mousemove     -> mouseEvent e
   Mouseup       -> mouseEvent e
@@ -79,3 +81,5 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Mouseleave    -> return ()
   Focus         -> return ()
   Blur          -> return ()  
+  Input         -> return ()
+  _             -> error "Missing handler in defaultDomEventHandler"

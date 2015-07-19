@@ -109,6 +109,9 @@ instance Reflex t => IsElement (InputElement t a) where
   
 instance Reflex t => HasFocus (InputElement t a) where
   hasFocus = _input_hasFocus  
+  
+instance Reflex t => HasDomEvent t (InputElement t a) where
+  domEvent en e = domEvent en (toElement e)
                       
 instance (Reflex t, Default a) => Default (InputConfig t a) where
   def = InputConfig { _inputConfig_initialValue = def
@@ -136,9 +139,7 @@ setFocus_ :: MonadAppHost t m => Element t -> Event t Bool -> HtmlT m ()
 setFocus_ e eSetFocus = lift $ performEvent_ $ ffor eSetFocus $ \focus -> liftIO $ if focus 
       then Dom.elementFocus (domElement e)
       else Dom.elementBlur (domElement e)        
-        
-
-
+       
 
 
 makeInput_ :: (MonadAppHost t m, Dom.IsElement dom) => (Dom.Element -> dom) -> (dom -> a -> IO ()) -> (dom -> IO a) 

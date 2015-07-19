@@ -128,15 +128,17 @@ domList input  = do
   mapDyn (fmap snd) viewsDyn
 
   
-makeView :: (MonadHold t m, Reflex t, Ord k) => (k -> Dynamic t v -> m a) -> Event t (Map k v) -> Event t (Map k (m a))
-makeView makeView e = Map.mapWithKey itemView <$> e 
-  where
-    itemView k v = do
-      d <- holdDyn v (fmapMaybe (Map.lookup k) e)
-      makeView k d
-      
--- domListView :: (k -> Dynamic v -> m a) -> Event t (Map k v) -> HtmlT m (Dynamic t (Map k a))
-        
+makeView :: (MonadAppHost t m, Ord k) =>  Dynamic t (Map k v) -> (k -> Dynamic t v -> HtmlT m a) -> HtmlT m (Event t (Map k (HtmlT m a)))
+makeView d view = fmap (Map.mapWithKey itemView) <$> lift (dynToEvents d)
+  where itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated d)) >>= view k
+
+
+  
+listWithKey :: (MonadAppHost t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v -> HtmlT m a) -> HtmlT m (Dynamic t (Map k a))
+listWithKey d view = makeView d view >>= domList 
+
+list :: (MonadAppHost t m, Ord k) => Dynamic t (Map k v) -> (Dynamic t v -> HtmlT m a) -> HtmlT m (Dynamic t (Map k a))
+list d view = listWithKey  d (const view)
 
 
    

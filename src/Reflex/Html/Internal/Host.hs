@@ -37,14 +37,26 @@ import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad
 import Control.Monad.Fix
+import Control.Concurrent
 
   
 type Actions t = HostFrame t (AppInfo t) 
   
   
+performAsyncIO :: MonadAppHost t m => IO a -> m (Event t a)
+performAsyncIO action = do
+  (result, fire) <- newExternalEvent
+  liftIO $ forkIO $ void . fire =<< action
+  return result    
+  
 schedulePostBuild_ ::  (MonadAppHost t m) => HostFrame t () -> m ()
 schedulePostBuild_ action = performPostBuild_ $ action >> pure mempty
   
+  
+dynToEvents :: MonadAppHost t m => Dynamic t a -> m (Event t a)
+dynToEvents d = do 
+  initial <- performPostBuild (sample (current d))
+  return $ leftmost [initial, updated d]
   
 mergeList' :: Reflex t => [Event t a]  -> Event t [a]
 mergeList' = (fmap NE.toList) . mergeList

@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Reflex.Html.Internal.ElementEvents where
+module Reflex.Html.Internal.DomEvents where
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Event as Dom
@@ -211,6 +211,7 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'ClickTag       = ()
   EventResultType 'DblclickTag    = ()
   EventResultType 'KeypressTag    = KeyCode
+  EventResultType 'KeydownTag     = KeyCode
   EventResultType 'ScrollTag      = Int
   EventResultType 'MousemoveTag   = (Int, Int)
   EventResultType 'MousedownTag   = (Int, Int)
@@ -219,6 +220,8 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'MouseleaveTag  = ()
   EventResultType 'FocusTag       = ()
   EventResultType 'BlurTag        = ()
+  EventResultType 'InputTag       = ()
+
   
   
 deriveGEq ''EventName

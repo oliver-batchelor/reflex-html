@@ -70,12 +70,12 @@ instance Reflex t => HasDomEvent t (Element t) where
 
 addAttribute :: (MonadAppHost t m, Dom.IsElement e) => e -> (Key, ValueA t m) -> m ()
 addAttribute dom (k, StaticA mStr) = liftIO $ forM_ mStr $ Dom.elementSetAttribute dom k
-addAttribute dom (k, DynamicA makeDyn) = makeDyn >>= \d -> do
+addAttribute dom (k, DynamicA makeDyn) = nubDyn <$> makeDyn >>= \d -> do
   
   schedulePostBuild_ $ do 
     initial <- sample (current d) 
     forM_ initial (liftIO . Dom.elementSetAttribute dom k)
-     
+  
   performEvent_ $ addRemove <$> updated d
   
   where
@@ -91,8 +91,8 @@ buildEmptyElement namespace elementTag attrs = do
   
   Just dom <- liftIO $ Dom.documentCreateElementNS doc namespace elementTag  
   lift $ mapM_ (addAttribute dom) (flattenA attrs)
+  
   void $ liftIO $ Dom.nodeAppendChild p $ Just dom
-
   return $ Dom.castToElement dom  
 
 domElement :: IsElement e => e -> Dom.Element
