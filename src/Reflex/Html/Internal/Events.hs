@@ -35,19 +35,35 @@ bindEvents :: MonadAppHost t m => Dom.Element -> HtmlT m (Events t)
 bindEvents dom = lift $ wrapDomEventsMaybe dom $ defaultDomEventHandler dom
      
  
-type EventHandler f e en  = (forall en. EventName en -> Dom.EventM (EventType en) e (Maybe (f en)))
+type EventsHandler f e en  = (forall en. EventName en -> Dom.EventM (EventType en) e (Maybe (f en)))
 
-wrapDomEventsMaybe :: (MonadAppHost t m, Dom.IsElement e) => e -> EventHandler f e en -> m (EventSelector t (WrapArg f EventName))
+wrapDomEventsMaybe :: (MonadAppHost t m, Dom.IsElement e) => e -> EventsHandler f e en -> m (EventSelector t (WrapArg f EventName))
 wrapDomEventsMaybe element handlers = do
-  fire <- getAsyncFire
+  postAsync <- getPostAsync
   e <- newFanEventWithTrigger $ \(WrapArg en) et -> do
         unsubscribe <- liftIO $ (onEventName en) element $ do
           mv <- handlers en
-          forM_ mv $ \v -> liftIO $ fire [et :=> v]
+          forM_ mv $ \v -> liftIO $ postAsync $ pure [et :=> v]
         return . liftIO $ unsubscribe
   return $! e
 
 
+type EventHandler e event =  (e -> Dom.EventM event e () -> IO (IO ()))
+
+wrapDomEvent :: (MonadAppHost t m, Dom.IsElement e) => e -> EventHandler  e event -> Dom.EventM event e a -> m (Event t a)
+wrapDomEvent element elementOnevent getValue = wrapDomEventMaybe element elementOnevent $ liftM Just getValue
+
+wrapDomEventMaybe :: (MonadAppHost t m, Dom.IsElement e) => e -> EventHandler e event -> Dom.EventM event e (Maybe a) -> m (Event t a)
+wrapDomEventMaybe element elementOnevent getValue = do
+  postAsync <- getPostAsync
+
+  e <- newEventWithTrigger $ \et -> do
+        unsubscribe <- liftIO $  elementOnevent element $ do
+          mv <-  getValue
+          forM_ mv $ \v -> liftIO $ postAsync $ pure [et :=> v]
+        return $ liftIO $  unsubscribe
+  return $! e  
+  
   
 getKeyEvent :: Dom.EventM Dom.UIEvent e KeyCode
 getKeyEvent = do
@@ -71,7 +87,7 @@ defaultDomEventHandler e evt = liftM (Just . EventResult) $ case evt of
   Click         -> return ()
   Dblclick      -> return ()
   Keypress      -> getKeyEvent
-  Keydown       -> getKeyEvent
+  Keydown       -> {-getKeyEvent-} Dom.event >>= liftIO . Dom.uiEventGetKeyCode
   
   Scroll        -> liftIO $ Dom.elementGetScrollTop e
   Mousemove     -> mouseEvent e

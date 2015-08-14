@@ -31,7 +31,7 @@ import Data.Dependent.Sum
 
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as Map
-import qualified Data.Foldable as F
+import Data.Foldable
 
 import Control.Lens
 import Control.Monad.IO.Class
@@ -49,8 +49,8 @@ performAsyncIO action = do
   liftIO $ forkIO $ void . fire =<< action
   return result    
   
-schedulePostBuild_ ::  (MonadAppHost t m) => HostFrame t () -> m ()
-schedulePostBuild_ action = performPostBuild_ $ action >> pure mempty
+-- schedulePostBuild_ ::  (MonadAppHost t m) => HostFrame t () -> m ()
+-- schedulePostBuild_ action = performPostBuild_ $ action >> pure mempty
   
   
 dynToEvents :: MonadAppHost t m => Dynamic t a -> m (Event t a)
@@ -80,8 +80,13 @@ collect newItems = do
   pure $ fmap fst <$> updated itemDyn  
   
 
-switchActions :: (MonadAppHost t m, Functor f, Foldable f) => Event t (f (HostFrame t (AppInfo t))) -> m ()
-switchActions info = void $ performAppHost $ performPostBuild_ <$> getApp . foldMap id . fmap Ap <$> info
+-- switchActions :: (MonadAppHost t m, Functor f, Foldable f) => Event t (f (HostFrame t (AppInfo t))) -> m ()
+-- switchActions info = void $ performAppHost $ performPostBuild_ <$> getApp . foldMap id . fmap Ap <$> info
+
+switchActions :: (MonadAppHost t m, Functor f, Foldable f) => Event t (f (AppInfo t)) -> m ()
+switchActions info = do
+  actions <- switchPromptly never $ mergeWith (>>) . toList <$> info
+  performEvent_ actions
 
   
 hostCollection :: MonadAppHost t m => Event t [m (a, Event t ())] -> m (Event t [a])
@@ -94,12 +99,12 @@ hostCollection newItems = do
         rearrange (a, (b, c)) = ((a, b), c)  
  
   
-dynamicView :: (MonadAppHost t m) => Event t a -> (Dynamic t a -> m (Event t b)) -> m (Event t b) 
-dynamicView e view = do
-  (first, rest) <- headTailE e  
-  r <- performAppHost $ ffor first $ \v -> do
-    holdDyn v rest >>= view
-  switchPromptly never r 
+-- dynamicView :: (MonadAppHost t m) => Event t a -> (Dynamic t a -> m (Event t b)) -> m (Event t b) 
+-- dynamicView e view = do
+--   (first, rest) <- headTailE e  
+--   r <- performAppHost $ ffor first $ \v -> do
+--     holdDyn v rest >>= view
+--   switchPromptly never r 
   
   
 

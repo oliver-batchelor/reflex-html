@@ -68,12 +68,12 @@ runHtml head body =  liftIO $ runWebGUI $ \webView -> do
   Just headElem <- Dom.documentGetHead doc
   Just bodyElem <- Dom.documentGetBody doc
   
-  appState <- runSpiderHost $ initHostApp $ do
+  (chan, step) <- runSpiderHost $ initHostApp $ do
     attachRoot doc (Dom.toHTMLElement headElem) head
     attachRoot doc (Dom.toHTMLElement bodyElem) body
   
-  forM_ appState $ \(chan, step) -> void . liftIO . forkIO . forever $ do 
-    liftIO (readChan chan) >>= Dom.postGUISync . runSpiderHost . step 
+  void . liftIO . forkIO . forever $ do 
+    liftIO (readChan chan) >>= Dom.postGUIAsync . runSpiderHost . void . step 
  
  
 runInFragment :: MonadAppHost t m => HtmlT m a -> HtmlT m (a, Dom.DocumentFragment)

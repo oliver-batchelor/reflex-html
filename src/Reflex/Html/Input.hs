@@ -32,6 +32,8 @@ import Safe
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Element as Dom
+import qualified GHCJS.DOM.Event as Dom
+import qualified GHCJS.DOM.EventM as Dom
 import qualified GHCJS.DOM.HTMLElement as Dom
 import qualified GHCJS.DOM.HTMLInputElement as Dom
 import qualified GHCJS.DOM.HTMLTextAreaElement as Dom
@@ -142,12 +144,14 @@ setFocus_ e eSetFocus = lift $ performEvent_ $ ffor eSetFocus $ \focus -> liftIO
        
 
 
-makeInput_ :: (MonadAppHost t m, Dom.IsElement dom) => (Dom.Element -> dom) -> (dom -> a -> IO ()) -> (dom -> IO a) 
+makeInput_ :: (MonadAppHost t m, Dom.IsElement dom, Show a) => (Dom.Element -> dom) -> (dom -> a -> IO ()) -> (dom -> IO a) 
               -> InputConfig t a -> Element t ->  HtmlT m (InputElement t a)
 makeInput_ cast setter getter (InputConfig initial eSetValue eSetFocus) e = do
   liftIO $ setter dom initial
+  
+  eChanged <- lift $ wrapDomEvent dom  Dom.elementOninput (liftIO $ getter dom)
   lift $ performEvent_ $ liftIO . setter dom  <$> eSetValue
-  eChanged <- lift $ performEvent $ liftIO (getter dom) <$ domEvent Input e
+
   
   setFocus_ e eSetFocus 
   dFocus <- holdFocus e
@@ -174,14 +178,17 @@ checkboxView attrs dValue = do
   e <- inputElement "checkbox" attrs 
   let dom = Dom.castToHTMLInputElement $ domElement e
 
-  lift $ schedulePostBuild_ $ do
+  lift $ schedulePostBuild $ do
     v <- sample $ current dValue
     when v $ liftIO $ Dom.htmlInputElementSetChecked dom True
     
-  --TODO: Need to preventDefault to avoid a loop
-  click <- lift $ performEvent $ liftIO (Dom.htmlInputElementGetChecked dom) <$ clicked e
+  eChanged <- lift $ wrapDomEvent dom  Dom.elementOnchange $ do
+    Dom.preventDefault 
+    liftIO $ Dom.htmlInputElementGetChecked dom
+   
+    
   lift $ performEvent_ $ fmap (\v -> liftIO $ Dom.htmlInputElementSetChecked dom $! v) $ updated dValue
-  return click          
+  return eChanged          
   
 
   

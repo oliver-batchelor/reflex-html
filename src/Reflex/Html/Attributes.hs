@@ -50,6 +50,7 @@ name_ = stringAttr "name"
 type_ = stringAttr "type"
 placeholder_ = stringAttr "placeholder"
 value_ = stringAttr "value"
+id_ = stringAttr "id"
 
 
 rows_ :: Attr Int

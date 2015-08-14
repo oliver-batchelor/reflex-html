@@ -58,7 +58,10 @@ library
     dependent-sum-template >= 0.0.0.4 && < 0.1,
     bifunctors,
     time
-    
+  
+  ghc-prof-options: -fprof-auto
+  ghc-options: -Wall -fwarn-tabs -funbox-strict-fields -O2
+  
   if impl(ghcjs)
     hs-source-dirs: src-ghcjs
     cpp-options: -D__GHCJS__

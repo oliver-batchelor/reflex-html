@@ -63,8 +63,9 @@ flattenA  = map (second concatValues) . Map.toList . unAttr
 
    
 mergeListDyn :: (Reflex t, MonadHold t m) => [Dynamic t a] -> m (Dynamic t [a])   
+mergeListDyn [d]  = mapDyn pure d
 mergeListDyn dyns = do 
-  lists <- mapM (mapDyn (:[])) dyns 
+  lists <- mapM (mapDyn pure) dyns 
   mconcatDyn lists
   
   

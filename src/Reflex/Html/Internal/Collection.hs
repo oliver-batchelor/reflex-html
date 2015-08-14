@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, DeriveFunctor #-}
 
 module Reflex.Html.Internal.Collection where
 
@@ -27,9 +27,10 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Maybe
 import Data.Monoid
+import Data.Tuple
 
 
-data Diff a = Added a | Removed deriving (Show)
+data Diff a = Added a | Removed deriving (Show, Functor)
 
 $(makePrisms ''Diff)
 
@@ -37,9 +38,10 @@ $(makePrisms ''Diff)
 deleteBetweenExclusive :: (Dom.Node, Dom.Node) -> IO ()
 deleteBetweenExclusive (start, end) = traverse_ removeFrom =<< Dom.nodeGetParentNode end  where
   removeFrom parent = do 
-    Just node <- Dom.nodeGetPreviousSibling end
-    when (start /= node) $ do
-      Dom.nodeRemoveChild parent (Just node) >> removeFrom parent
+    node <- Dom.nodeGetPreviousSibling end
+    eq <- Dom.nodeIsEqualNode start node
+    when eq $ do
+      Dom.nodeRemoveChild parent node >> removeFrom parent
 
         
 -- | s and e must both be children of the same node and s must precede e
@@ -52,9 +54,10 @@ deleteBetweenInclusive (start, end) = do
 
   where   
     removeFrom parent = do 
-      Just node <- Dom.nodeGetPreviousSibling end
-      Dom.nodeRemoveChild parent  (Just node)
-      when (start /= node) $ removeFrom parent
+      node <- Dom.nodeGetPreviousSibling end
+      Dom.nodeRemoveChild parent node
+      eq <- Dom.nodeIsEqualNode start node
+      when eq $ removeFrom parent
   
   
   
@@ -113,32 +116,36 @@ diffInput currentItems updatedItems = ffilter (not . Map.null) $
   attachWith diffKeys currentItems updatedItems
 
 
-domList :: (MonadAppHost t m, Ord k) => Event t (Map k (HtmlT m a)) -> HtmlT m (Dynamic t (Map k a))
+domList :: (MonadAppHost t m, Ord k, Show k) => Event t (Map k (HtmlT m a)) -> HtmlT m (Dynamic t (Map k a))
 domList input  = do
   runAppHost <- lift getRunAppHost  
   runHtmlT <- askRunHtmlT
   rec
     let runView = fmap rearrange . runAppHost . runHtmlT . runInFragment
-        changes = diffInput  (current viewsDyn) input
         rearrange (info, (a, frag)) = (frag, (info, a))
+        changes = diffInput  (current viewsDyn) input 
+        
+--     lift $ performEvent $ liftIO . print . fmap (fmap (const ())) <$> changes
 
     changedViews <- lift . performEvent $ mapMOf (traverse . _Added) runView <$> changes
     viewsDyn <- holdDomList changedViews
+    
   lift $ switchActions (fmap fst <$> (updated viewsDyn))
   mapDyn (fmap snd) viewsDyn
 
   
-makeView :: (MonadAppHost t m, Ord k) =>  Dynamic t (Map k v) -> (k -> Dynamic t v -> HtmlT m a) -> HtmlT m (Event t (Map k (HtmlT m a)))
+makeView :: (MonadAppHost t m, Ord k, Show k) =>  Dynamic t (Map k v) -> (k -> Dynamic t v -> HtmlT m a) -> HtmlT m (Event t (Map k (HtmlT m a)))
 makeView d view = fmap (Map.mapWithKey itemView) <$> lift (dynToEvents d)
-  where itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated d)) >>= view k
+  where  itemView k v = holdDyn v (fmapMaybe (Map.lookup k) (updated d)) >>= view k
 
 
   
-listWithKey :: (MonadAppHost t m, Ord k) => Dynamic t (Map k v) -> (k -> Dynamic t v -> HtmlT m a) -> HtmlT m (Dynamic t (Map k a))
+listWithKey :: (MonadAppHost t m, Ord k, Show k) => Dynamic t (Map k v) -> (k -> Dynamic t v -> HtmlT m a) -> HtmlT m (Dynamic t (Map k a))
 listWithKey d view = makeView d view >>= domList 
 
-list :: (MonadAppHost t m, Ord k) => Dynamic t (Map k v) -> (Dynamic t v -> HtmlT m a) -> HtmlT m (Dynamic t (Map k a))
+list :: (MonadAppHost t m, Ord k, Show k) => Dynamic t (Map k v) -> (Dynamic t v -> HtmlT m a) -> HtmlT m (Dynamic t (Map k a))
 list d view = listWithKey  d (const view)
 
 
-   
+
+  

@@ -42,7 +42,7 @@ data ElementConfig t m = ElementConfig
 liftM concat $ mapM makeLenses
   [ ''ElementConfig
   ]   
-  
+--   
 class Reflex (T r) => HasReflex r where
   type T r :: * 
   
@@ -70,9 +70,9 @@ instance Reflex t => HasDomEvent t (Element t) where
 
 addAttribute :: (MonadAppHost t m, Dom.IsElement e) => e -> (Key, ValueA t m) -> m ()
 addAttribute dom (k, StaticA mStr) = liftIO $ forM_ mStr $ Dom.elementSetAttribute dom k
-addAttribute dom (k, DynamicA makeDyn) = nubDyn <$> makeDyn >>= \d -> do
+addAttribute dom (k, DynamicA makeDyn) = makeDyn >>= \d -> do
   
-  schedulePostBuild_ $ do 
+  schedulePostBuild $ do 
     initial <- sample (current d) 
     forM_ initial (liftIO . Dom.elementSetAttribute dom k)
   
@@ -136,7 +136,7 @@ text' str = do
 dynText :: (MonadAppHost t m) => Dynamic t String -> HtmlT m ()
 dynText d = do
   n <- text' ""
-  lift $ schedulePostBuild_ $ do
+  lift $ schedulePostBuild $ do
     str <- sample $ current d
     liftIO $ Dom.nodeSetNodeValue n str
   lift $ performEvent_ $ fmap (liftIO . Dom.nodeSetNodeValue n) $ updated d  
