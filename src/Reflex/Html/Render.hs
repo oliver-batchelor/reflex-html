@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, RankNTypes, TupleSections, GADTs, TemplateHaskell, ConstraintKinds, StandaloneDeriving, UndecidableInstances, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 
-module Render  where
+module Reflex.Html.Render  where
 
 
 import qualified GHCJS.DOM as Dom
@@ -31,8 +31,9 @@ import Data.Functor.Misc
 import Reflex
 import Reflex.Host.Class
 
-import Tag
-import Event
+import Data.IORef
+import Data.Unsafe.Tag
+import Reflex.Html.Event
 
 data Env t = Env
   { envDoc    :: Dom.Document
@@ -91,6 +92,14 @@ renderEmptyElement ns tag attrs = withParent $ \parent doc -> liftIO $ do
   return $ Dom.castToElement dom
 
 
+renderText :: RenderM t => String -> Render t Dom.Text
+renderText str = withParent $ \parent doc -> liftIO $ do
+  Just dom <- Dom.createTextNode doc str
+  void $ Dom.appendChild parent $ Just dom
+  return dom
+
+
+
 renderElement :: RenderM t => String -> String -> Map String String -> Render t a -> Render t (Dom.Element, a)
 renderElement ns tag attrs child = do
   dom <- renderEmptyElement ns tag attrs
@@ -103,17 +112,28 @@ renderElement ns tag attrs child = do
 
 runRender :: RenderM t => Render t a -> Chan (DSum (EventTrigger t)) -> Dom.Document -> Dom.Node -> (HostFrame t) a
 runRender (Render render) chan doc root = do
-  (a, _, _) <- runRSST render (Env doc root chan) ()
+  (a, _) <- evalRSST render (Env doc root chan) ()
   return a
 
 
-renderBody :: Render Spider () -> IO ()
+postTriggerRef :: RenderM t => a -> IORef (Maybe (EventTrigger t a)) -> Render t ()
+postTriggerRef a ref = do
+  postAsync <- askPostAsync
+  liftIO $ readIORef ref >>= traverse_ (\t -> postAsync (t :=> a))
+
+postResult :: RenderM t => IORef (Maybe (EventTrigger t (DMap Tag))) -> Render t () -> Render t ()
+postResult ref render = do
+  (_, result) <- listen render
+  postTriggerRef result ref
+
+
+renderBody ::  Render Spider () -> IO ()
 renderBody render = Dom.runWebGUI $ \webView -> do
     Dom.enableInspector webView
     Just doc <- Dom.webViewGetDomDocument webView
     Just body <- Dom.getBody doc
-    chan <- liftIO newChan
 
+    chan <- liftIO newChan
     runSpiderHost $ runHostFrame $
       runRender render chan doc (Dom.toNode body)
 

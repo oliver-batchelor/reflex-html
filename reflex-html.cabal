@@ -5,45 +5,52 @@ description:
 license:             BSD3
 license-file:        LICENSE
 author:              Oliver Batchelor
-category:            Game
+category:            FRP
 build-type:          Simple 
--- extra-source-files:  
 cabal-version:       >=1.10
 
 
+executable html-test
+  hs-source-dirs: test
+  main-is: Main.hs
+
+  build-depends:
+    base,
+    reflex,
+    reflex-html,
+    transformers,
+    mtl,
+    containers
+
 library
-  exposed-modules:   Reflex.Dom.Html
-  other-modules: 
-    Reflex.Dom.Html.Internal.Attributes,
-    Reflex.Dom.Html.Internal.Element,
-    Reflex.Dom.Html.Internal.Events,
-    Reflex.Dom.Html.Internal.Html
-    
-    Reflex.Dom.Html.Elements,
-    Reflex.Dom.Html.Events,
-    Reflex.Dom.Html.Input,
-    Reflex.Dom.Html.Attributes,
-    Reflex.Dom.Html.KeyCodes
-    
+  exposed-modules:   
+    Reflex.Html.Html,
+    Reflex.Html.Render,
+    Reflex.Html.Event
+  other-modules:
+    Data.Unsafe.Tag
   
   hs-source-dirs: src
   build-depends:
     base,
     reflex, 
-    reflex-dom, 
-    ghcjs-dom,
+    reflex-transformers,
+    ghcjs-dom >= 0.2.3,
     containers,
-    transformers,
     contravariant,
-    mtl,
     lens,
     data-default,
-    safe,
-    ref-tf,
-    exception-transformers,
     bytestring,
-    singletons
-    
+    dependent-sum,
+    dependent-sum-template,
+    dependent-map,
+    semigroups,
+    bifunctors,
+    transformers,
+    mtl,
+    stateWriter >= 0.2.6
+  
+  default-language: Haskell2010
   default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, TupleSections, EmptyDataDecls, RecursiveDo, ScopedTypeVariables, 
                       FlexibleContexts, FlexibleInstances, GADTs, RankNTypes, TypeFamilies, DataKinds, ConstraintKinds, NoMonomorphismRestriction
 

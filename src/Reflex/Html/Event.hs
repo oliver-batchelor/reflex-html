@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, FlexibleContexts, TypeFamilies, GADTs, DataKinds, KindSignatures #-}
 
-module Event where
+module Reflex.Html.Event where
 
 import qualified GHCJS.DOM.Element as Dom
 import qualified GHCJS.DOM.EventM as Dom
