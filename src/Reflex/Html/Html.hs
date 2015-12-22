@@ -1,13 +1,15 @@
 
-{-# LANGUAGE RankNTypes, GADTs, TemplateHaskell, ConstraintKinds, StandaloneDeriving, UndecidableInstances, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, RankNTypes, GADTs, TemplateHaskell, ConstraintKinds, StandaloneDeriving, UndecidableInstances, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 
 module Reflex.Html.Html  where
 
-import Control.Monad.Reader
-import Control.Monad.State.Strict
+import Control.Monad.Reader.Class
+import Control.Monad.State.Class
+import Control.Monad.Trans
+import Control.Monad.Fix
 import Control.Monad.Trans.RSS.Strict
 
-import Control.Lens hiding (Traversal)
+import Control.Lens hiding (Traversal, runTraversal)
 
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
@@ -16,39 +18,45 @@ import Data.Dependent.Sum
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import Data.Functor
 import Data.Semigroup
+import Data.Semigroup.Applicative
 
 import Reflex
 import Reflex.Host.Class
 
 import Reflex.Monad
-import Reflex.Monad.ReaderWriter
 import Reflex.Monad.ReflexM
 
 import Data.GADT.Compare.TH
 import Data.Functor.Misc
 
+import qualified Control.Concurrent.Supply as S
+
 import Reflex.Html.Event
 import Reflex.Html.Render
 import Data.Unsafe.Tag
 
-type Frame = Int
-type NeedRender t = Behavior t (Frame, Render t (Maybe (DSum Tag)))
 
 newtype Html t a = Html
   { unDom :: RSST
-      (RenderEvent t, Behavior t Frame)
+      (EventSelector t Tag)
       (Traversal (Render t))
-      (Int, [NeedRender t])
-      (ReflexM t) a
+      S.Supply
+        (ReflexM t) a
   }
     deriving (Functor, Applicative, Monad, MonadFix)
+
 
 instance ReflexHost t => MonadSample t (Html t) where
    sample = Html . lift . sample
 
 instance ReflexHost t => MonadHold t (Html t) where
    hold a0 = Html . lift . hold a0
+
+
+deriving instance ReflexHost t => MonadReader (EventSelector t Tag) (Html t)
+deriving instance ReflexHost t => MonadWriter (Traversal (Render t)) (Html t)
 
 
 class HasDomEvent t a where
@@ -62,17 +70,8 @@ newtype Element t = Element { elementEvents :: Events t }
 
 freshTag :: Html t (Tag a)
 freshTag = Html $ do
-  i <- gets fst
-  _1 .= i + 1
+  i <- state S.freshId
   return (Tag i)
-
-newtype Traversal f = Traversal { runTraversal :: f () }
-
-instance Applicative f => Monoid (Traversal f) where
-  mempty = Traversal $ pure ()
-  mappend (Traversal a) (Traversal b) = Traversal $ a *> b
-
-
 
 render_ :: RenderM t => Render t () -> Html t ()
 render_ = Html . tell . Traversal
@@ -80,9 +79,8 @@ render_ = Html . tell . Traversal
 render :: RenderM t =>  Render t a -> Html t (Event t a)
 render r = do
   tag <- freshTag
-  Html $ do
-    tell $ Traversal $ returnRender tag r
-    asks (fmapMaybe (DMap.lookup tag) . fst)
+  tell $ Traversal $ returnRender tag r
+  asks (flip select tag)
 
 holdRender :: RenderM t => Render t a -> Html t (Behavior t (Maybe a))
 holdRender r = hold Nothing =<< fmap Just <$> render r
@@ -133,20 +131,20 @@ element' ns tag attrs child = do
   (a,) <$> holdSelector es
 
 
+runReflexFrame :: ReflexM Spider a -> SpiderHost a
+runReflexFrame m = runHostFrame (runReflexM m)
 
-runHtmlFrame :: Html Spider () -> IO (Render Spider ())
-runHtmlFrame (Html m) = runSpiderHost $ do
-  (renderE, ref) <- newEventWithTriggerRef
-  frame <- current <$> count renderE
-
-  (_, Traversal render) <- runHostFrame $ runReflexM $ evalRSST m (renderE, frame) (0, [])
-  return (postResult ref render)
-
+runHtmlFrame :: Event Spider (DMap Tag) -> Html Spider () -> IO (Render Spider ())
+runHtmlFrame e (Html m) = runSpiderHost $ do
+  s <- liftIO S.newSupply
+  (_, r) <- runReflexFrame $ evalRSST m (fan e) s
+  return (getTraversal r)
 
 htmlBody :: Html Spider () -> IO ()
 htmlBody html = do
-  render <- runHtmlFrame html
-  renderBody render
+  (e, ref) <- runSpiderHost newEventWithTriggerRef
+  render <- runHtmlFrame e html
+  renderBody ref render
 
 
 

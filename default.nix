@@ -1,8 +1,8 @@
-{ mkDerivation, base, bifunctors, bytestring, containers
-, contravariant, data-default, dependent-map, dependent-sum
-, dependent-sum-template, ghcjs-dom, lens, mtl, reflex
-, reflex-transformers, semigroups, stateWriter, stdenv
-, transformers
+{ mkDerivation, base, bifunctors, bytestring, concurrent-supply
+, containers, contravariant, data-default, dependent-map
+, dependent-sum, dependent-sum-template, ghcjs-dom, lens, mtl
+, reducers, reflex, reflex-transformers, semigroups, stateWriter
+, stdenv, transformers
 }:
 mkDerivation {
   pname = "reflex-html";
@@ -11,9 +11,10 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   libraryHaskellDepends = [
-    base bifunctors bytestring containers contravariant data-default
-    dependent-map dependent-sum dependent-sum-template ghcjs-dom lens
-    mtl reflex reflex-transformers semigroups stateWriter transformers
+    base bifunctors bytestring concurrent-supply containers
+    contravariant data-default dependent-map dependent-sum
+    dependent-sum-template ghcjs-dom lens mtl reducers reflex
+    reflex-transformers semigroups stateWriter transformers
   ];
   executableHaskellDepends = [
     base containers mtl reflex transformers
