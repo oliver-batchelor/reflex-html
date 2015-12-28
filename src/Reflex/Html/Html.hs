@@ -15,14 +15,18 @@ import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 import Data.Dependent.Sum
 
+import qualified Data.DList as DL
+import Data.DList (DList)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Data.Functor
+import Data.Foldable
 import Data.Semigroup
 import Data.Semigroup.Applicative
 
 import Reflex
+import Reflex.Dirty
 import Reflex.Host.Class
 
 import Reflex.Monad
@@ -38,11 +42,13 @@ import Reflex.Html.Render
 import Data.Unsafe.Tag
 
 
+type Request t = Dirty t (Ap (HostFrame t) (DList (DSum Tag)))
+
 newtype Html t a = Html
-  { unDom :: RSST
+  { unHtml :: RSST
       (EventSelector t Tag)
       (Traversal (Render t))
-      S.Supply
+      (S.Supply, [Request t])
         (ReflexM t) a
   }
     deriving (Functor, Applicative, Monad, MonadFix)
@@ -70,17 +76,43 @@ newtype Element t = Element { elementEvents :: Events t }
 
 freshTag :: Html t (Tag a)
 freshTag = Html $ do
-  i <- state S.freshId
+  i <- _1 %%= S.freshId
   return (Tag i)
 
+eventTag :: RenderM t => Html t (Event t a, Tag a)
+eventTag = do
+  tag <- freshTag
+  e <- asks (flip select tag)
+  return (e, tag)
+
 render_ :: RenderM t => Render t () -> Html t ()
-render_ = Html . tell . Traversal
+render_  = Html .  tell . Traversal
+
+tagRender :: RenderM t => Html t (Event t a, HostFrame t a -> Ap (HostFrame t) (DList (DSum Tag)))
+tagRender = do
+  (e, tag) <- eventTag
+  return (e, Ap . (>>= tagReturn tag))
+
+  where
+    tagReturn tag a = return (pure (tag :=> a))
+
+
+performRender_ :: RenderM t => Event t (HostFrame t ()) -> Html t ()
+performRender_ e = do
+  (reset, f) <- tagRender
+  tellRequest =<< dirty (f <$> e) reset
+
+
+tellRequest :: RenderM t => Dirty t (Ap (HostFrame t) (DList (DSum Tag))) -> Html t ()
+tellRequest d = Html $ _2 %= (d :)
 
 render :: RenderM t =>  Render t a -> Html t (Event t a)
 render r = do
   tag <- freshTag
   tell $ Traversal $ returnRender tag r
   asks (flip select tag)
+
+
 
 holdRender :: RenderM t => Render t a -> Html t (Behavior t (Maybe a))
 holdRender r = hold Nothing =<< fmap Just <$> render r
@@ -101,10 +133,13 @@ text str = render_ $ void $ renderText str
 
 
 dynText :: RenderM t => Dynamic t String -> Html t ()
-dynText d = undefined
-  --do
---  eb <- holdRender $ renderText =<< sample (current d)
+dynText d = do
+  e <- render $
+    sample (current d) >>= fmap Just . renderText
 
+  textB <- hold Nothing e
+  performRender_ (attachWithMaybe update textB (updated d))
+    where update mText str = liftIO . flip updateText str <$> mText
 
 
 element :: RenderM t => String -> String -> Map String String -> Html t (Events t)
@@ -131,14 +166,25 @@ element' ns tag attrs child = do
   (a,) <$> holdSelector es
 
 
+mergeRequests :: RenderM t => [Request t] -> Html t (Request t)
+mergeRequests reqs = do
+  (reset, tag) <- eventTag
+  req <- mergeDirty reqs reset
+  let occ = tag :=> ()
+
+  return (fmap (fmap (DL.cons occ)) <$> req)
+
+
 runReflexFrame :: ReflexM Spider a -> SpiderHost a
 runReflexFrame m = runHostFrame (runReflexM m)
 
 runHtmlFrame :: Event Spider (DMap Tag) -> Html Spider () -> IO (Render Spider ())
-runHtmlFrame e (Html m) = runSpiderHost $ do
+runHtmlFrame e m = runSpiderHost $ do
   s <- liftIO S.newSupply
-  (_, r) <- runReflexFrame $ evalRSST m (fan e) s
+  (reqs, r) <- runReflexFrame $ evalRSST (unHtml runRoot) (fan e) (s, [])
+
   return (getTraversal r)
+    where runRoot = m >> (Html (gets snd) >>= mergeRequests >>= holdDirty)
 
 htmlBody :: Html Spider () -> IO ()
 htmlBody html = do

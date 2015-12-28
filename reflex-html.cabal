@@ -28,7 +28,8 @@ library
     Reflex.Html.Render,
     Reflex.Html.Event
   other-modules:
-    Data.Unsafe.Tag
+    Data.Unsafe.Tag,
+    Reflex.Dirty
   
   hs-source-dirs: src
   build-depends:
@@ -50,6 +51,7 @@ library
     bifunctors,
     transformers,
     mtl,
+    dlist,
     stateWriter >= 0.2.6
   
   default-language: Haskell2010

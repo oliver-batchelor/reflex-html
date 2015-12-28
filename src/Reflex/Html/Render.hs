@@ -1,10 +1,10 @@
-{-# LANGUAGE TypeSynonymInstances, ScopedTypeVariables, RankNTypes, TupleSections, GADTs, TemplateHaskell, ConstraintKinds, StandaloneDeriving, UndecidableInstances, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances, ScopedTypeVariables, RankNTypes, TupleSections, GADTs, TemplateHaskell, ConstraintKinds, StandaloneDeriving, UndecidableInstances, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, LambdaCase #-}
 
 module Reflex.Html.Render  where
 
-
 import qualified GHCJS.DOM as Dom
 import qualified GHCJS.DOM.Node as Dom
+import qualified GHCJS.DOM.Text as Dom
 import qualified GHCJS.DOM.Document as Dom
 import qualified GHCJS.DOM.Element as Dom
 import qualified GHCJS.DOM.Types as Dom
@@ -34,48 +34,28 @@ import Reflex.Host.Class
 import Data.IORef
 import Data.Unsafe.Tag
 import Reflex.Html.Event
+import Reflex.Monad
+
+import qualified Data.List.NonEmpty as NE
+import Data.Semigroup.Applicative
 
 data Env t = Env
   { envDoc    :: Dom.Document
   , envParent :: Dom.Node
   , envChan   :: Chan (DSum (EventTrigger t))
-  , envFrame  :: Behavior t Frame
   }
 
-type Frame = Int
-
-type Rendering t = ([DSum Tag], [Behavior t (Frame, Render t ())] )
 
 type RenderM t = (MonadIO (HostFrame t), ReflexHost t)
-newtype Render t a = Render
-  { unRender :: RSST
-      (Env t)
-      (Rendering t)
-      ()
-        (HostFrame t) a
-  }
+
+
+
+type Render t a = StateT [DSum Tag] (HostFrame t) a
+type Builder t a = ReaderT (Env t) (Render t a)
 
 type EventHandler e event =  (e -> Dom.EventM e event () -> IO (IO ()))
 type EventsHandler f e en  = (forall en. EventName en -> Dom.EventM  e (EventType en)  (Maybe (f en)))
 
-deriving instance ReflexHost t => Functor (Render t)
-deriving instance ReflexHost t => Applicative (Render t)
-deriving instance ReflexHost t => Monad (Render t)
-deriving instance ReflexHost t => MonadReader (Env t) (Render t)
-deriving instance (ReflexHost t, MonadIO (HostFrame t)) => MonadIO (Render t)
-deriving instance ReflexHost t => MonadFix (Render t)
-
-
-instance ReflexHost t => MonadReflexCreateTrigger t (Render t) where
-  newEventWithTrigger = Render . lift . newEventWithTrigger
-  newFanEventWithTrigger initializer = Render $ lift $ newFanEventWithTrigger initializer
-
-instance ReflexHost t => MonadSample t (Render t) where
-  sample = Render . lift . sample
-
-instance ReflexHost t => MonadHold t (Render t) where
-  hold a0 = Render . lift . hold a0
-  switchMerge i = Render . lift . switchMerge i
 
 askDocument :: RenderM t => Render t Dom.Document
 askDocument = asks envDoc
@@ -105,6 +85,9 @@ renderText str = withParent $ \parent doc -> liftIO $ do
   void $ Dom.appendChild parent $ Just dom
   return dom
 
+updateText :: Dom.Text -> String -> IO ()
+updateText text =  void . Dom.replaceWholeText text
+
 
 renderElement :: RenderM t => String -> String -> Map String String -> Render t a -> Render t (Dom.Element, a)
 renderElement ns tag attrs child = do
@@ -116,9 +99,9 @@ renderElement ns tag attrs child = do
     reParent dom e = e { envParent = dom }
 
 
-execRender :: RenderM t => Render t () -> Behavior t Frame -> Chan (DSum (EventTrigger t)) -> Dom.Document -> Dom.Node -> (HostFrame t) (Rendering t)
-execRender (Render render) frame chan doc root =
-  snd <$> evalRSST render (Env doc root chan frame) ()
+execRender :: RenderM t => Render t () -> Chan (DSum (EventTrigger t)) -> Dom.Document -> Dom.Node -> (HostFrame t)  [DSum Tag]
+execRender (Render render) chan doc root =
+  snd <$> evalRSST render (Env doc root chan) ()
 
 
 type TriggerRef t a = IORef (Maybe (EventTrigger t a))
@@ -136,18 +119,16 @@ renderBody tr render = Dom.runWebGUI $ \webView -> do
     Just body <- Dom.getBody doc
 
     chan <- liftIO newChan
-    runSpiderHost $ runHostFrame $ do
-
-      frame <- hold 0 never
-      (occs, bs) <-  execRender render frame chan doc (Dom.toNode body)
-      return ()
+    occs <- runSpiderHost $ runHostFrame $
+        execRender render chan doc (Dom.toNode body)
+    return ()
 
 returnRender :: RenderM t => Tag a -> Render t a -> Render t ()
 returnRender t r = r >>= tellOcc . (t :=>)
 
-
 tellOcc :: RenderM t => DSum Tag -> Render t ()
-tellOcc occ = Render $ tell ([occ], [])
+tellOcc occ = modify (occ:)
+
 
 wrapDomEvent :: (RenderM t, Dom.IsElement e) => e -> EventHandler  e event -> Dom.EventM e event a -> Render t (Event t a)
 wrapDomEvent element elementOnevent getValue = wrapDomEventMaybe element elementOnevent $ Just <$> getValue
