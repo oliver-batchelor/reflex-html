@@ -10,10 +10,8 @@ import qualified GHCJS.DOM.Element as Dom
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.EventM as Dom
 
-import Control.Monad.Reader.Class
-import Control.Monad.Writer.Class
+import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Control.Monad.Trans.RSS.Strict
 
 import Control.Concurrent.Chan
 import Control.Lens
@@ -22,6 +20,7 @@ import Data.Dependent.Sum
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 
+import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -46,41 +45,60 @@ data Env t = Env
   }
 
 
-type RenderM t = (MonadIO (HostFrame t), ReflexHost t)
+class (ReflexHost t, MonadIO (Host t), MonadSample t (Host t), MonadReflexCreateTrigger t (Host t)) => Renderer t where
+  type Host t :: * -> *
+
+instance Renderer Spider where
+  type Host Spider = SpiderHost
 
 
+newtype Render t a = Render { unRender :: StateT [DSum Tag] (Host t) a }
 
-type Render t a = StateT [DSum Tag] (HostFrame t) a
-type Builder t a = ReaderT (Env t) (Render t a)
+deriving instance Renderer t => Functor (Render t)
+deriving instance Renderer t => Applicative (Render t)
+deriving instance Renderer t => Monad (Render t)
+deriving instance Renderer t => MonadIO (Render t)
+deriving instance Renderer t => MonadState [DSum Tag] (Render t)
+deriving instance Renderer t => MonadSample t (Render t)
+
+
+instance Renderer t => MonadReflexCreateTrigger t (Render t) where
+  newEventWithTrigger      = Render . lift . newEventWithTrigger
+  newFanEventWithTrigger f = Render $ lift $ newFanEventWithTrigger f
+
+
+newtype Builder t a = Build { unBuild :: ReaderT (Env t) (Render t) a }
+  deriving (Functor, Applicative, Monad, MonadIO, MonadSample t, MonadReader (Env t), MonadState [DSum Tag])
+
 
 type EventHandler e event =  (e -> Dom.EventM e event () -> IO (IO ()))
 type EventsHandler f e en  = (forall en. EventName en -> Dom.EventM  e (EventType en)  (Maybe (f en)))
 
 
-askDocument :: RenderM t => Render t Dom.Document
+askDocument :: Renderer t => Builder t Dom.Document
 askDocument = asks envDoc
 
-askPostAsync :: RenderM t => Render t (DSum (EventTrigger t) -> IO ())
+askPostAsync :: Renderer t => Builder t (DSum (EventTrigger t) -> IO ())
 askPostAsync = post <$> asks envChan
   where post chan tv = writeChan chan tv
 
 
-withParent :: RenderM t =>  (Dom.Node -> Dom.Document -> Render t a) -> Render t a
+withParent :: Renderer t =>  (Dom.Node -> Dom.Document -> Builder t a) -> Builder t a
 withParent f = do
   env <- ask
   f (envParent env) (envDoc env)
 
 
-renderEmptyElement :: RenderM t => String -> String -> Map String String -> Render t Dom.Element
-renderEmptyElement ns tag attrs = withParent $ \parent doc -> liftIO $ do
+buildEmptyElement :: Renderer t => String -> String -> Map String String -> Builder t Dom.Element
+buildEmptyElement ns tag attrs = withParent $ \parent doc -> liftIO $ do
   Just dom <- Dom.createElementNS doc (Just ns) (Just tag)
   imapM_ (Dom.setAttribute dom) attrs
   void $ Dom.appendChild parent $ Just dom
   return $ Dom.castToElement dom
 
 
-renderText :: RenderM t => String -> Render t Dom.Text
-renderText str = withParent $ \parent doc -> liftIO $ do
+buildText :: Renderer t => String -> Builder t Dom.Text
+buildText str = withParent $ \parent doc -> liftIO $ do
   Just dom <- Dom.createTextNode doc str
   void $ Dom.appendChild parent $ Just dom
   return dom
@@ -89,9 +107,9 @@ updateText :: Dom.Text -> String -> IO ()
 updateText text =  void . Dom.replaceWholeText text
 
 
-renderElement :: RenderM t => String -> String -> Map String String -> Render t a -> Render t (Dom.Element, a)
-renderElement ns tag attrs child = do
-  dom <- renderEmptyElement ns tag attrs
+buildElement :: Renderer t => String -> String -> Map String String -> Builder t a -> Builder t (Dom.Element, a)
+buildElement ns tag attrs child = do
+  dom <- buildEmptyElement ns tag attrs
   a <- local (reParent (Dom.toNode dom)) child
   return (dom, a)
 
@@ -99,56 +117,52 @@ renderElement ns tag attrs child = do
     reParent dom e = e { envParent = dom }
 
 
-execRender :: RenderM t => Render t () -> Chan (DSum (EventTrigger t)) -> Dom.Document -> Dom.Node -> (HostFrame t)  [DSum Tag]
-execRender (Render render) chan doc root =
-  snd <$> evalRSST render (Env doc root chan) ()
-
 
 type TriggerRef t a = IORef (Maybe (EventTrigger t a))
 
-postTriggerRef :: RenderM t => a -> TriggerRef t a -> Render t ()
+postTriggerRef :: Renderer t => a -> TriggerRef t a -> Builder t ()
 postTriggerRef a ref = do
   postAsync <- askPostAsync
   liftIO $ readIORef ref >>= traverse_ (\t -> postAsync (t :=> a))
 
 
-renderBody :: TriggerRef Spider (DMap Tag) ->  Render Spider () -> IO ()
-renderBody tr render = Dom.runWebGUI $ \webView -> do
+buildBody :: TriggerRef Spider (DMap Tag) -> Builder Spider () -> IO ()
+buildBody tr (Build build) = Dom.runWebGUI $ \webView -> do
     Dom.enableInspector webView
     Just doc <- Dom.webViewGetDomDocument webView
-    Just body <- Dom.getBody doc
+    env <- Env doc
+      <$> (Dom.toNode . fromJust <$> Dom.getBody doc)
+      <*> newChan
 
-    chan <- liftIO newChan
-    occs <- runSpiderHost $ runHostFrame $
-        execRender render chan doc (Dom.toNode body)
+    occs <- runSpiderHost $
+      execStateT (unRender (runReaderT build env)) []
     return ()
 
-returnRender :: RenderM t => Tag a -> Render t a -> Render t ()
-returnRender t r = r >>= tellOcc . (t :=>)
+return_ :: MonadState [DSum Tag] m => Tag a -> a -> m ()
+return_ t a = tellOcc  (t :=> a)
 
-tellOcc :: RenderM t => DSum Tag -> Render t ()
+tellOcc :: MonadState [DSum Tag] m => DSum Tag -> m ()
 tellOcc occ = modify (occ:)
 
-
-wrapDomEvent :: (RenderM t, Dom.IsElement e) => e -> EventHandler  e event -> Dom.EventM e event a -> Render t (Event t a)
+wrapDomEvent :: (Renderer t, Dom.IsElement e) => e -> EventHandler  e event -> Dom.EventM e event a -> Builder t (Event t a)
 wrapDomEvent element elementOnevent getValue = wrapDomEventMaybe element elementOnevent $ Just <$> getValue
 
-wrapDomEventMaybe :: (RenderM t, Dom.IsElement e) => e -> EventHandler e event -> Dom.EventM e event (Maybe a) -> Render t (Event t a)
+wrapDomEventMaybe :: (Renderer t, Dom.IsElement e) => e -> EventHandler e event -> Dom.EventM e event (Maybe a) -> Builder t (Event t a)
 wrapDomEventMaybe element onEvent getValue = do
   postAsync <- askPostAsync
-  newEventWithTrigger $ \et -> onEvent element $
+  Build $ newEventWithTrigger $ \et -> onEvent element $
       getValue >>= liftIO . traverse_ (\v -> postAsync (et :=> v))
 
 
 type Events t = EventSelector t (WrapArg EventResult EventName)
 
-bindEvents :: (RenderM t, Dom.IsElement e) => e -> Render t (Events t)
+bindEvents :: (Renderer t, Dom.IsElement e) => e -> Builder t (Events t)
 bindEvents dom = wrapDomEventsMaybe dom (defaultDomEventHandler dom)
 
-wrapDomEventsMaybe :: (RenderM t, Dom.IsElement e) => e -> EventsHandler f e en -> Render t (EventSelector t (WrapArg f EventName))
+wrapDomEventsMaybe :: (Renderer t, Dom.IsElement e) => e -> EventsHandler f e en -> Builder t (EventSelector t (WrapArg f EventName))
 wrapDomEventsMaybe element handlers = do
   postAsync  <- askPostAsync
-  newFanEventWithTrigger $ \(WrapArg en) et -> onEventName en element  $ do
+  Build $ newFanEventWithTrigger $ \(WrapArg en) et -> onEventName en element  $ do
       handlers en >>= liftIO . traverse_ (\v -> postAsync (et :=> v))
 
 
