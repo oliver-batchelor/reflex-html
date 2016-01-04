@@ -24,19 +24,26 @@ dirty e reset = do
       False -> Just <$> hold a e
       True  -> return Nothing
 
-holdDirty :: (MonadReflex t m, Monoid a) => Dirty t a -> m (Behavior t a)
-holdDirty d = join <$> hold (constant mempty) d
+holdDirty :: (MonadReflex t m, Monoid a) => [Dirty t a] -> Event t () -> m (Behavior t (Maybe a))
+holdDirty ds reset = do
+  l <- current <$> holdDirtyList ds reset
+  return $ pull $ nonEmpty <$> sample l >>= traverse sample
 
-mergeDirty :: (MonadReflex t m, Monoid a) => [Dirty t a] -> Event t () -> m (Dirty t a)
-mergeDirty cs reset = do
-  d <- foldDyn ($) [] $ mergeWith (.)
+
+holdDirtyList :: MonadReflex t m => [Dirty t a] -> Event t () -> m (Dynamic t [Behavior t a])
+holdDirtyList ds reset = foldDyn ($) [] $ mergeWith (.)
     [ const mempty <$ reset
-    , mappend . NE.toList <$>  mergeList cs
+    , mappend . NE.toList <$>  mergeList ds
     ]
 
-  fmap join <$> dirty (fmapMaybe nonEmpty (updated d)) reset
 
-  where
-    nonEmpty [] = Nothing
-    nonEmpty xs = Just (mconcat xs)
+mergeDirty :: (MonadReflex t m, Monoid a) => [Dirty t a] -> Event t () -> m (Dirty t a)
+mergeDirty ds reset = do
+  l <- updated <$> holdDirtyList ds reset
+  fmap join <$> dirty (fmapMaybe nonEmpty l) reset
+
+
+nonEmpty :: Monoid a => [a] -> Maybe a
+nonEmpty [] = Nothing
+nonEmpty xs = Just (mconcat xs)
 
