@@ -83,9 +83,6 @@ instance Reflex t => HasValue (InputElement t a) where
 instance Reflex t => HasSetFocus (InputConfig t a) where
   setFocus = inputConfig_setFocus
 
-type Attributes t = Map String String
-
-
 text :: Renderer t => String -> Html t ()
 text str = build_ $  buildText str
 

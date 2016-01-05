@@ -94,6 +94,10 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (RSST r w s 
   newEventWithTrigger = lift . newEventWithTrigger
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
+
+
+type DynMap t k a = (Behavior t (Map k a), Event t (Map k (Maybe a)))
+
 type Builder t a = BuilderT t (RenderT t (HostFrame t)) a
 type Render t a = RenderT t (HostFrame t) a
 
@@ -155,11 +159,23 @@ newEvent = do
 
 
 render :: Renderer t => Event t a -> (a -> Render t ()) -> Builder t ()
-render e f = do
+render = renderWith dirty
+
+foldRender :: Renderer t => (a -> a -> a) -> Event t a -> (a -> Render t ()) -> Builder t ()
+foldRender f = renderWith (foldDirty f)
+
+renderWith :: Renderer t => (Event t a -> Event t () -> Builder t (Dirty t a))
+           -> Event t a -> (a -> Render t ()) -> Builder t ()
+renderWith f e toRender = do
   (reset, fire) <- lift newEvent
-  let run a = Traversal $ f a >>= fire
-  r <- dirty (run <$> e) reset
-  modify (r :)
+  let run a = Traversal $ toRender a >> fire ()
+  r <- f e reset
+  modify (fmap run r :)
+
+
+
+-- foldRender :: (a -> a -> a) -> Event t a -> (a -> Render t ()) -> Builder t ()
+-- foldRender f e toRender =
 
 resetEvent :: Renderer t => Builder t (Event t (), Traversal (RenderT t (HostFrame t)))
 resetEvent = do
@@ -170,7 +186,7 @@ mergeRequests :: Renderer t => [Request t] -> Builder t (Request t)
 mergeRequests reqs = do
   (reset, triggerReset) <- resetEvent
   req <- mergeDirty reqs reset
-  return (fmap (triggerReset <>) <$> req)
+  return (mappend triggerReset <$> req)
 
 
 holdRequests :: Renderer t => [Request t] -> Builder t (Behavior t (Maybe (Render t ())))
@@ -216,7 +232,6 @@ buildBody tr build = Dom.runWebGUI $ \webView -> do
 
     runAsync (readChan (envChan env))
              (runHost . fireEvents . pure)
-
     return ()
 
   where
@@ -230,13 +245,16 @@ withParent f = do
   f (envParent env) (envDoc env)
 
 
-buildElement_ :: Renderer t => String -> String -> Map String String -> Builder t Dom.Element
-buildElement_ ns tag attrs = withParent $ \parent doc -> liftIO $ do
-  Just dom <- Doc.createElementNS doc (Just ns) (Just tag)
-  imapM_ (Dom.setAttribute dom) attrs
-  void $ Dom.appendChild parent $ Just dom
-  return $ Dom.castToElement dom
 
+
+
+buildElement_ :: Renderer t => String -> String -> DynMap t String String -> Builder t Dom.Element
+buildElement_ ns tag (currentA, updatedA) = withParent $ \parent doc -> do
+  Just dom <- liftIO $ Doc.createElementNS doc (Just ns) (Just tag)
+  sample currentA >>= imapM_ (Dom.setAttribute dom)
+
+  liftIO $ Dom.appendChild parent $ Just dom
+  return dom
 
 buildText :: Renderer t => String -> Builder t Dom.Text
 buildText str = withParent $ \parent doc -> liftIO $ do
@@ -248,7 +266,7 @@ updateText :: MonadIO m => Dom.Text -> String -> m ()
 updateText text =  liftIO . void . Dom.setData text . Just
 
 
-buildElement :: Renderer t => String -> String -> Map String String -> Builder t a -> Builder t (Dom.Element, a)
+buildElement :: Renderer t => String -> String -> DynMap t String String -> Builder t a -> Builder t (Dom.Element, a)
 buildElement ns tag attrs child = do
   dom <- buildElement_ ns tag attrs
   a <- local (reParent (Dom.toNode dom)) child
@@ -257,11 +275,7 @@ buildElement ns tag attrs child = do
   where
     reParent dom e = e { envParent = dom }
 
-
-
 -- Event Trigger creation from input events
-
-
 wrapDomEvent :: (Renderer t, Dom.IsElement e, Dom.EventClass event) => e ->  Dom.EventName e event -> Dom.EventM e event a -> Builder t (Event t a)
 wrapDomEvent element eventName getValue = wrapDomEventMaybe element eventName $ Just <$> getValue
 

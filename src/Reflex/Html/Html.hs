@@ -76,6 +76,39 @@ instance Reflex t => HasDomEvent t (Element t) where
   domEvent en e = unEventResult <$> select (elementEvents e) (WrapArg en)
 
 
+fmapDyn :: Reflex t => (a -> b) -> Dynamic t a -> Dynamic t b
+fmapDyn f d = unsafeDynamic (f <$> current d) (f <$> updated d)
+
+data Attribute t = forall a. (:=) (Attr a) a
+                 | forall a. (:~) (Attr a) (Dynamic t a)
+
+data Attr a = Attr
+  { attrName   :: String
+  , attrString :: (a -> Maybe String)
+  }
+
+sampleAttributes :: MonadSample t m => Map String (Either (Maybe String) (Dynamic t (Maybe String))) -> m (Map String String)
+sampleAttributes attrMap = do
+ strs <- forM attrMap $ \case
+   Left  str -> pure str
+   Right d   -> sample (current d)
+ return (Map.mapMaybe id strs)
+
+
+holdAttributes :: MonadReflex t m => [Attribute t] -> m (DynMap t String String)
+holdAttributes attrs = do
+  attrMap <- Map.fromList <$> traverse toString attrs
+  return (pull $ sampleAttributes attrMap,
+         mergeMap $ Map.mapMaybe (fmap updated . fromRight) attrMap)
+
+  where
+    toString (Attr k f := a) = pure (k, Left (f a))
+    toString (Attr k f :~ d) = (k,) . Right <$> mapDyn f d
+
+    fromRight (Right a) = Just a
+    fromRight _         = Nothing
+
+htmlNs :: String
 htmlNs = "http://www.w3.org/1999/xhtml"
 
 freshTag :: Html t (Tag a)
