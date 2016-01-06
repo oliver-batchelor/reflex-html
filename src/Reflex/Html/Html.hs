@@ -83,8 +83,8 @@ data Attribute t = forall a. (:=) (Attr a) a
                  | forall a. (:~) (Attr a) (Dynamic t a)
 
 data Attr a = Attr
-  { attrName   :: String
-  , attrString :: (a -> Maybe String)
+  { attrString :: (a -> Maybe String)
+  , attrName   :: String
   }
 
 sampleAttributes :: MonadSample t m => Map String (Either (Maybe String) (Dynamic t (Maybe String))) -> m (Map String String)
@@ -102,8 +102,8 @@ holdAttributes attrs = do
          mergeMap $ Map.mapMaybe (fmap updated . fromRight) attrMap)
 
   where
-    toString (Attr k f := a) = pure (k, Left (f a))
-    toString (Attr k f :~ d) = (k,) . Right <$> mapDyn f d
+    toString (Attr f k := a) = pure (k, Left (f a))
+    toString (Attr f k :~ d) = (k,) . Right <$> mapDyn f d
 
     fromRight (Right a) = Just a
     fromRight _         = Nothing

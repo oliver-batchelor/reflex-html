@@ -86,28 +86,30 @@ instance Reflex t => HasSetFocus (InputConfig t a) where
 text :: Renderer t => String -> Html t ()
 text str = build_ $  buildText str
 
-
 dynText :: Renderer t => Dynamic t String -> Html t ()
 dynText d = build_ $ do
   text <- sample (current d) >>= buildText
   render (updated d) $ updateText text
 
 
-element :: Renderer t => String -> String -> Attributes t -> Html t (Events t)
+element :: Renderer t => String -> String -> [Attribute t] -> Html t (Events t)
 element ns tag attrs = do
-  build $ bindEvents =<< buildElement_ ns tag attrs
+  dynAttrs <- holdAttributes attrs
+  build $ bindEvents =<< buildElement_ ns tag dynAttrs
 
 
-element_ :: Renderer t => String -> String -> Attributes t -> Html t a -> Html t a
+element_ :: Renderer t => String -> String -> [Attribute t] -> Html t a -> Html t a
 element_ ns tag attrs child = do
   (a, r) <- collectBuilder child
-  build_ $ buildElement ns tag attrs r
+  dynAttrs <- holdAttributes attrs
+  build_ $ buildElement ns tag dynAttrs r
   return a
 
-element' :: Renderer t => String -> String -> Attributes t -> Html t a -> Html t (a, Element t)
+element' :: Renderer t => String -> String -> [Attribute t] -> Html t a -> Html t (a, Element t)
 element' ns tag attrs child = do
   (a, r) <- collectBuilder child
-  events <- build $ bindEvents . fst =<< buildElement ns tag attrs r
+  dynAttrs <- holdAttributes attrs
+  events <- build $ bindEvents . fst =<< buildElement ns tag dynAttrs r
   return (a, Element events)
 
 updateFocus :: (Renderer t, Dom.IsElement e) => e -> Dynamic t Bool ->  Builder t ()
@@ -141,12 +143,27 @@ makeInput setter getter config create = do
 
   return $ InputElement value changes events
 
+stringAttr :: String -> Attr String
+stringAttr = Attr Just
 
-textInput :: Renderer t => Attributes t -> InputConfig t String -> Html t (InputElement t String)
-textInput attrs config = makeInput Input.setValue Input.getValue config create
-  where
-    create = Dom.castToHTMLInputElement <$>
-      buildElement_ htmlNs "input" (Map.singleton "type" "text")
+boolAttr :: String -> Attr Bool
+boolAttr = Attr $ \case
+  True  -> Just "true"
+  False -> Nothing
+
+type_ :: Attr String
+type_ = stringAttr "type"
+
+hidden_ :: Attr Bool
+hidden_ = boolAttr "hidden"
+
+textInput :: Renderer t => [Attribute t] -> InputConfig t String -> Html t (InputElement t String)
+textInput attrs config = do
+  dynAttrs <- holdAttributes (attrs ++ [type_ := "text"])
+  makeInput Input.setValue Input.getValue config (create dynAttrs)
+    where
+      create attrs' = Dom.castToHTMLInputElement <$>
+        buildElement_ htmlNs "input" attrs'
 
 
 

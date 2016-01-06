@@ -111,8 +111,6 @@ askPostAsync = post <$> asks envChan
   where post chan tv = writeChan chan tv
 
 
-
-
 postTriggerRef :: Renderer t => a -> TriggerRef t a -> Builder t ()
 postTriggerRef a ref = do
   postAsync <- askPostAsync
@@ -150,8 +148,6 @@ newTriggerRef = do
   return (e, rt)
 {-# INLINE newTriggerRef #-}
 
-
-
 newEvent :: Renderer t => Render t (Event t a, a -> Render t ())
 newEvent = do
   (e, tr) <- Render newTriggerRef
@@ -172,10 +168,6 @@ renderWith f e toRender = do
   r <- f e reset
   modify (fmap run r :)
 
-
-
--- foldRender :: (a -> a -> a) -> Event t a -> (a -> Render t ()) -> Builder t ()
--- foldRender f e toRender =
 
 resetEvent :: Renderer t => Builder t (Event t (), Traversal (RenderT t (HostFrame t)))
 resetEvent = do
@@ -220,24 +212,22 @@ runAsync input action = forkIO $ forever $ do
 
 buildBody :: TriggerRef Impl (DMap Tag) -> Builder Impl () -> IO ()
 buildBody tr build = Dom.runWebGUI $ \webView -> do
-    Dom.enableInspector webView
-    Just doc <- Dom.webViewGetDomDocument webView
-    env <- Env doc
-      <$> (Dom.toNode . fromJust <$> Doc.getBody doc)
-      <*> newChan
+  Dom.enableInspector webView
+  Just doc <- Dom.webViewGetDomDocument webView
+  env <- Env doc
+    <$> (Dom.toNode . fromJust <$> Doc.getBody doc)
+    <*> newChan
 
-    render <- runHost $ runRender tr $ runBuilder env build
-    runAsync (threadDelay (1000000 `div` frameRate))
-             (const $ sampleRender tr render)
+  render <- runHost $ runRender tr $ runBuilder env build
+  runAsync (threadDelay (1000000 `div` frameRate))
+           (const $ sampleRender tr render)
 
-    runAsync (readChan (envChan env))
-             (runHost . fireEvents . pure)
-    return ()
+  runAsync (readChan (envChan env))
+           (runHost . fireEvents . pure)
+  return ()
 
-  where
-    frameRate = 30
-
-
+    where
+      frameRate = 30
 
 withParent :: Renderer t =>  (Dom.Node -> Dom.Document -> Builder t a) -> Builder t a
 withParent f = do
@@ -245,16 +235,19 @@ withParent f = do
   f (envParent env) (envDoc env)
 
 
-
-
-
 buildElement_ :: Renderer t => String -> String -> DynMap t String String -> Builder t Dom.Element
 buildElement_ ns tag (currentA, updatedA) = withParent $ \parent doc -> do
-  Just dom <- liftIO $ Doc.createElementNS doc (Just ns) (Just tag)
-  sample currentA >>= imapM_ (Dom.setAttribute dom)
+  Just e <- liftIO $ Doc.createElementNS doc (Just ns) (Just tag)
+  sample currentA >>= imapM_ (Dom.setAttribute e)
+  foldRender (flip Map.union) updatedA $
+    liftIO . imapM_ (addRemove e)
 
-  liftIO $ Dom.appendChild parent $ Just dom
-  return dom
+  liftIO $ Dom.appendChild parent $ Just e
+  return e
+
+addRemove :: Dom.Element -> String -> Maybe String -> IO ()
+addRemove e name (Just v) = Dom.setAttribute e name v
+addRemove e name Nothing  = Dom.removeAttribute e name
 
 buildText :: Renderer t => String -> Builder t Dom.Text
 buildText str = withParent $ \parent doc -> liftIO $ do

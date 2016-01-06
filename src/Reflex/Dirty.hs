@@ -20,12 +20,16 @@ newtype Dirty t a = Dirty { unDirty :: Event t (Behavior t a) }
 instance Reflex t => Functor (Dirty t) where
   fmap f = Dirty . fmap (fmap f) . unDirty
 
+{-# INLINE boolM #-}
+boolM :: Applicative m => Bool -> m b -> m (Maybe b)
+boolM True  m  = Just <$> m
+boolM False _  = pure Nothing
 
 resetting :: MonadReflex t m => (a -> PushM t b) -> Event t a -> Event t () -> m (Event t b)
 resetting f ea reset = do
   rec
-    let eb  = gate sent $ pushAlways f ea
-    sent <- hold False $ leftmost [True <$ eb, False <$ reset]
+    let eb  = push (\a -> sample clean >>= flip boolM (f a)) ea
+    clean <- hold True $ leftmost [False <$ eb, True <$ reset]
   return eb
 
 dirty :: MonadReflex t m => Event t a -> Event t () -> m (Dirty t a)
@@ -46,7 +50,6 @@ holdDirtyList ds reset = foldDyn ($) [] $ mergeWith (.)
     [ const mempty <$ reset
     , mappend . NE.toList <$>  mergeList (coerce ds)
     ]
-
 
 mergeDirty :: (MonadReflex t m, Monoid a) => [Dirty t a] -> Event t () -> m (Dirty t a)
 mergeDirty ds reset = do
