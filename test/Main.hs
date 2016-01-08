@@ -30,7 +30,6 @@ button' = html' "button"
 h1_ = element_ htmlNs "h1"
 h1' = element' htmlNs "h1"
 
-type Questions = ([String], [String])
 
 form :: Renderer t => [String] -> Html t (Dynamic t [String])
 form questions = workflow start where
@@ -42,11 +41,16 @@ form questions = workflow start where
     return (ans, start <$ clicked b)
   form' (q:qs) ans = do
 
+
+
     text q >> br []
     t <- textInput [] $ def
     (_, b) <-  button' [] $ text "Ok!"
+    dynText (value t)
+
     let answer = tag (current $ value t) (clicked b)
-    return (ans, Workflow . form' qs . (:ans) <$> answer)
+    return (ans, Workflow . form' qs . (: ans)  <$> answer)
+
 
 
 

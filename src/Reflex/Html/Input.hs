@@ -89,7 +89,7 @@ text str = build_ $  buildText str
 dynText :: Renderer t => Dynamic t String -> Html t ()
 dynText d = build_ $ do
   text <- sample (current d) >>= buildText
-  render (updated d) $ updateText text
+  void $ render (updated d) $ updateText text
 
 
 element :: Renderer t => String -> String -> [Attribute t] -> Html t (Events t)
@@ -115,14 +115,14 @@ element' ns tag attrs child = do
 updateFocus :: (Renderer t, Dom.IsElement e) => e -> Dynamic t Bool ->  Builder t ()
 updateFocus e focus = do
   initial <- sample (current focus)
-  render (updated focus) $ \case
+  void $ render (updated focus) $ \case
       True  -> liftIO $ Dom.focus e
       False -> liftIO $ Dom.blur e
 
 updateDyn :: Renderer t => Dynamic t a -> (e -> Maybe a -> IO ()) -> e -> Builder t ()
 updateDyn d setter e = do
   liftIO . setter e . Just =<< sample (current d)
-  render (updated d) $ liftIO . setter e . Just
+  void $ render (updated d) $ liftIO . setter e . Just
 
 
 makeInput :: (Renderer t, Dom.IsElement e) => (e -> Maybe a -> IO ()) -> (e -> IO (Maybe a))

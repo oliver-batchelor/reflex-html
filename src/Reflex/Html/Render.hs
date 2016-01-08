@@ -150,11 +150,11 @@ newEvent = do
   (e, tr) <- Render newTriggerRef
   return (e, trigger tr)
 
-holdReset :: (MonadReflex t m) => Event t a -> Event t () -> m (Behavior t (Maybe a))
+holdReset :: (MonadReflex t m) => Event t a -> Event t b -> m (Behavior t (Maybe a))
 holdReset e reset = hold Nothing $ leftmost [Just <$> e, Nothing <$ reset]
 
 
-foldReset :: (MonadReflex t m) => (a -> a -> a) -> Event t a -> Event t () -> m (Behavior t (Maybe a))
+foldReset :: (MonadReflex t m) => (a -> a -> a) -> Event t a -> Event t b -> m (Behavior t (Maybe a))
 foldReset f e reset = current <$> foldDyn f' Nothing (leftmost [Just <$> e, Nothing <$ reset])
   where
     f' Nothing   _ = Nothing
@@ -162,19 +162,24 @@ foldReset f e reset = current <$> foldDyn f' Nothing (leftmost [Just <$> e, Noth
     f' (Just a) (Just b) = Just (f a b)
 
 
-render :: Renderer t => Event t a -> (a -> Render t ()) -> Builder t ()
+render :: Renderer t => Event t a -> (a -> Render t b) -> Builder t (Event t b)
 render = renderWith holdReset
 
-foldRender :: Renderer t => (a -> a -> a) -> Event t a -> (a -> Render t ()) -> Builder t ()
+
+foldRender :: Renderer t => (a -> a -> a) -> Event t a -> (a -> Render t b) -> Builder t (Event t b)
 foldRender f = renderWith (foldReset f)
 
-renderWith :: Renderer t => (Event t a -> Event t () -> Builder t (Behavior t (Maybe a)))
-           -> Event t a -> (a -> Render t ()) -> Builder t ()
+request :: Renderer t => Request t -> Builder t ()
+request r = modify (r :)
+
+renderWith :: Renderer t => (Event t a -> Event t b -> Builder t (Behavior t (Maybe a)))
+           -> Event t a -> (a -> Render t b) -> Builder t (Event t b)
 renderWith f e toRender = do
-  (reset, fire) <- lift newEvent
-  r <- f e reset
-  let run = maybe mempty (Traversal . (>> fire ()) . toRender)
-  modify (fmap run r :)
+  (result, fire) <- lift newEvent
+  r <- f e result
+  let run = maybe mempty (Traversal . (fire <=< toRender))
+  request (run <$> r)
+  return result
 
 
 
@@ -228,7 +233,6 @@ withParent f = do
   f (envParent env) (envDoc env)
 
 
-  -- render (updated d) $ updateText text
 deleteExclusive :: (Dom.Node, Dom.Node) -> IO ()
 deleteExclusive (start, end) = traverse_ removeFrom =<< Dom.getParentNode end  where
   removeFrom parent = do
@@ -239,17 +243,34 @@ deleteExclusive (start, end) = traverse_ removeFrom =<< Dom.getParentNode end  w
 makeRange :: Renderer t => Builder t () -> Builder t (Dom.Node, Dom.Node)
 makeRange b = (,) <$> marker <*> (b >> marker)
 
---collectBuilder :: Builder t a -> Builder t ()
 
 buildDyn :: Renderer t => Dynamic t (Builder t ()) -> Builder t ()
 buildDyn d = do
   env <- ask
-  (r, req) <- run env =<< sample (current d)
+
+  (r, req) <- makeRange <$> sample (current d) >>=
+    lift . runBuilder env
+
+  updatedReq <- render (updated d) $ replaceRange r env
+  request =<< switching req updatedReq
 
   return ()
 
-  where
-    run env b = lift $ runBuilder env (makeRange b)
+replaceRange :: Renderer t => (Dom.Node, Dom.Node) -> Env t -> Builder t () -> Render t (Request t)
+replaceRange (start, end) env b = do
+  (frag, req) <- inFragment env b
+  liftIO $ do
+    deleteExclusive (start, end)
+    Dom.insertBefore (envParent env) (Just frag) (Just end)
+  return req
+
+
+inFragment :: Renderer t => Env t -> Builder t () -> Render t (Dom.DocumentFragment, Request t)
+inFragment env b = do
+  (Just frag) <- liftIO $ Doc.createDocumentFragment (envDoc env)
+  (_, req) <- runBuilder (env {envParent = Dom.toNode frag}) b
+  return (frag, req)
+
 
 
 buildElement_ :: Renderer t => String -> String -> DynMap t String String -> Builder t Dom.Element
