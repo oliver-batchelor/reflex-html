@@ -19,6 +19,8 @@ html' = element' htmlNs
 p' = html' "p"
 p_ = html_ "p"
 
+br = html "br"
+
 div' = html' "div"
 div_ = html_ "div"
 
@@ -39,6 +41,8 @@ form questions = workflow start where
     (_, b) <- button' [] $ text "Again!"
     return (ans, start <$ clicked b)
   form' (q:qs) ans = do
+
+    text q >> br []
     t <- textInput [] $ def
     (_, b) <-  button' [] $ text "Ok!"
     let answer = tag (current $ value t) (clicked b)

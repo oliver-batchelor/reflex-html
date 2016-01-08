@@ -13,6 +13,7 @@ import qualified GHCJS.DOM.EventM as Dom
 import qualified GHCJS.DOM.Document as Doc
 
 import Control.Monad.State.Strict
+import Control.Monad.Trans.RSS.Strict
 import Control.Monad.RSS.Strict
 
 import Control.Concurrent
@@ -62,7 +63,7 @@ data Env t = Env
 type TriggerRef t a = IORef (Maybe (EventTrigger t a))
 type Renderer t = (ReflexHost t, MonadIO (HostFrame t))
 
-type RequestT t m = Dirty t (Traversal m)
+type RequestT t m = Behavior t (Traversal m)
 type Request t = RequestT t (RenderT t (HostFrame t))
 
 data TriggerOcc t = forall a. TriggerOcc (TriggerRef t a) a
@@ -93,8 +94,6 @@ instance MonadSample t m => MonadSample t (RSST r w s m) where
 instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (RSST r w s m) where
   newEventWithTrigger = lift . newEventWithTrigger
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
-
-
 
 type DynMap t k a = (Behavior t (Map k a), Event t (Map k (Maybe a)))
 
@@ -128,8 +127,6 @@ renderTriggers tr events = do
   return $ catMaybes (fanOcc:occs)
     where readTrigger = readTriggerRef (Proxy :: Proxy t)
 
-
-
 return_ :: Renderer t => Tag a -> a -> Render t ()
 return_ tag a = modify insertFan where
   insertFan re = re { rsFan = DMap.insert tag a (rsFan re) }
@@ -153,47 +150,43 @@ newEvent = do
   (e, tr) <- Render newTriggerRef
   return (e, trigger tr)
 
+holdReset :: (MonadReflex t m) => Event t a -> Event t () -> m (Behavior t (Maybe a))
+holdReset e reset = hold Nothing $ leftmost [Just <$> e, Nothing <$ reset]
+
+
+foldReset :: (MonadReflex t m) => (a -> a -> a) -> Event t a -> Event t () -> m (Behavior t (Maybe a))
+foldReset f e reset = current <$> foldDyn f' Nothing (leftmost [Just <$> e, Nothing <$ reset])
+  where
+    f' Nothing   _ = Nothing
+    f' (Just a)  Nothing = Just a
+    f' (Just a) (Just b) = Just (f a b)
+
 
 render :: Renderer t => Event t a -> (a -> Render t ()) -> Builder t ()
-render = renderWith dirty
+render = renderWith holdReset
 
 foldRender :: Renderer t => (a -> a -> a) -> Event t a -> (a -> Render t ()) -> Builder t ()
-foldRender f = renderWith (foldDirty f)
+foldRender f = renderWith (foldReset f)
 
-renderWith :: Renderer t => (Event t a -> Event t () -> Builder t (Dirty t a))
+renderWith :: Renderer t => (Event t a -> Event t () -> Builder t (Behavior t (Maybe a)))
            -> Event t a -> (a -> Render t ()) -> Builder t ()
 renderWith f e toRender = do
   (reset, fire) <- lift newEvent
-  let run a = Traversal $ toRender a >> fire ()
   r <- f e reset
+  let run = maybe mempty (Traversal . (>> fire ()) . toRender)
   modify (fmap run r :)
 
 
-resetEvent :: Renderer t => Builder t (Event t (), Traversal (RenderT t (HostFrame t)))
-resetEvent = do
-  (reset, fire) <- lift newEvent
-  return (reset, Traversal (fire ()))
-
-mergeRequests :: Renderer t => [Request t] -> Builder t (Request t)
-mergeRequests reqs = do
-  (reset, triggerReset) <- resetEvent
-  req <- mergeDirty reqs reset
-  return (mappend triggerReset <$> req)
-
-
-holdRequests :: Renderer t => [Request t] -> Builder t (Behavior t (Maybe (Render t ())))
-holdRequests reqs = do
-  (reset, triggerReset) <- resetEvent
-  req <- holdDirty reqs reset
-  return (fmap (getTraversal . mappend triggerReset) <$> req)
 
 fireTriggerRef :: (MonadIO m, MonadReflexHost t m) => TriggerRef t a -> a -> m ()
 fireTriggerRef tr a = liftIO (readIORef tr) >>= traverse_ (\t -> fireEvents [t :=> a])
 
 
-runBuilder ::  Renderer t =>  Env t -> Builder t () -> Render t (Behavior t (Maybe (Render t ())))
-runBuilder env build = fst <$> evalRSST (unBuild $ build >> holdRender)  env []
-    where holdRender = get >>= holdRequests
+runBuilder ::  Renderer t =>  Env t -> Builder t a -> Render t (a, Request t)
+runBuilder env (Build build) = do
+  (a, reqs, _) <- runRSST build env []
+  return (a, mconcat reqs)
+
 
 runRender ::  TriggerRef Impl (DMap Tag) -> Render Impl a -> Host a
 runRender tr (Render render) = do
@@ -201,8 +194,8 @@ runRender tr (Render render) = do
   fireEvents =<< renderTriggers tr events
   return a
 
-sampleRender :: TriggerRef Impl (DMap Tag) -> Behavior Impl (Maybe (Render Impl ())) -> IO ()
-sampleRender tr b = runHost $ sample b >>= traverse_ (runRender tr)
+sampleRender :: TriggerRef Impl (DMap Tag) -> Request Impl -> IO ()
+sampleRender tr b = runHost $ sample b >>= runRender tr . getTraversal
 
 
 runAsync :: IO a -> (a -> IO ()) -> IO ThreadId
@@ -218,7 +211,7 @@ buildBody tr build = Dom.runWebGUI $ \webView -> do
     <$> (Dom.toNode . fromJust <$> Doc.getBody doc)
     <*> newChan
 
-  render <- runHost $ runRender tr $ runBuilder env build
+  render <- runHost $ runRender tr (snd <$> runBuilder env build)
   runAsync (threadDelay (1000000 `div` frameRate))
            (const $ sampleRender tr render)
 
@@ -235,8 +228,28 @@ withParent f = do
   f (envParent env) (envDoc env)
 
 
+  -- render (updated d) $ updateText text
+deleteExclusive :: (Dom.Node, Dom.Node) -> IO ()
+deleteExclusive (start, end) = traverse_ removeFrom =<< Dom.getParentNode end  where
+  removeFrom parent = do
+    node <- Dom.getPreviousSibling end
+    when (Just start /= node) $ do
+      Dom.removeChild parent node >> removeFrom parent
+
+makeRange :: Renderer t => Builder t () -> Builder t (Dom.Node, Dom.Node)
+makeRange b = (,) <$> marker <*> (b >> marker)
+
+--collectBuilder :: Builder t a -> Builder t ()
+
 buildDyn :: Renderer t => Dynamic t (Builder t ()) -> Builder t ()
-buildDyn d = return ()
+buildDyn d = do
+  env <- ask
+  (r, req) <- run env =<< sample (current d)
+
+  return ()
+
+  where
+    run env b = lift $ runBuilder env (makeRange b)
 
 
 buildElement_ :: Renderer t => String -> String -> DynMap t String String -> Builder t Dom.Element
@@ -252,6 +265,9 @@ buildElement_ ns tag (currentA, updatedA) = withParent $ \parent doc -> do
 addRemove :: Dom.Element -> String -> Maybe String -> IO ()
 addRemove e name (Just v) = Dom.setAttribute e name v
 addRemove e name Nothing  = Dom.removeAttribute e name
+
+marker :: Renderer t => Builder t Dom.Node
+marker = Dom.toNode <$> buildText ""
 
 buildText :: Renderer t => String -> Builder t Dom.Text
 buildText str = withParent $ \parent doc -> liftIO $ do

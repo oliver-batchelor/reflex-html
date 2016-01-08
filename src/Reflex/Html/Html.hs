@@ -80,11 +80,12 @@ instance (Renderer t, MonadSwitch t m) => MonadSwitch t (HtmlT t m) where
     s <- getSplit
     env <- ask
     rec
-      (a, us, b) <- lift (split3 <$> switchM (Updated (run env s initial) $
-          attachWith (run env) r e))
+      (a, us, b) <- lift (split3 <$>
+        switchM (Updated (run env s initial) $ attachWith (run env) r e))
       r <- hold' us
 
-    build_ . buildDyn =<< mapDyn getTraversal =<< holdDyn' b
+    render <- mapDyn getTraversal =<< holdDyn' b
+    build_ $ buildDyn render
     return a
 
     where
