@@ -18,6 +18,7 @@ executable html-test
     base,
     reflex,
     reflex-html,
+    reflex-transformers,
     transformers,
     mtl,
     containers,

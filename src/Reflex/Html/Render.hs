@@ -235,6 +235,10 @@ withParent f = do
   f (envParent env) (envDoc env)
 
 
+buildDyn :: Renderer t => Dynamic t (Builder t ()) -> Builder t ()
+buildDyn d = return ()
+
+
 buildElement_ :: Renderer t => String -> String -> DynMap t String String -> Builder t Dom.Element
 buildElement_ ns tag (currentA, updatedA) = withParent $ \parent doc -> do
   Just e <- liftIO $ Doc.createElementNS doc (Just ns) (Just tag)

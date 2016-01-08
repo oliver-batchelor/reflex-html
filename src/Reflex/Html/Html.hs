@@ -59,6 +59,36 @@ newtype HtmlT t m a = Html
 
 type Html t a = HtmlT t (ReflexM t) a
 
+class (MonadSwitch t m) => MonadWidget t m where
+  build_ :: Builder t a   -> m ()
+  build' :: Builder t a   -> m (Event t a)
+
+instance (Renderer t, MonadSwitch t m) => MonadWidget t (HtmlT t m) where
+  build_  = Html .  tell . Traversal . void
+
+  build' r = do
+    tag <- freshTag
+    Html . tell $ Traversal (r >>= lift . return_ tag)
+    asks (flip select tag)
+
+split3 :: Functor f => f (a, b, c) -> (f a, f b, f c)
+split3 f = (view _1 <$> f, view _2 <$> f, view _3 <$> f)
+
+
+instance (Renderer t, MonadSwitch t m) => MonadSwitch t (HtmlT t m) where
+  switchM (Updated initial e) = do
+    s <- getSplit
+    env <- ask
+    rec
+      (a, us, b) <- lift (split3 <$> switchM (Updated (run env s initial) $
+          attachWith (run env) r e))
+      r <- hold' us
+
+    build_ . buildDyn =<< mapDyn getTraversal =<< holdDyn' b
+    return a
+
+    where
+      run env s (Html m) = runRSST m env s
 
 class HasDomEvent t a where
   domEvent :: EventName en -> a -> Event t (EventResultType en)
@@ -111,26 +141,22 @@ holdAttributes attrs = do
 htmlNs :: String
 htmlNs = "http://www.w3.org/1999/xhtml"
 
-freshTag :: Html t (Tag a)
+
+
+getSplit :: Monad m => HtmlT t m S.Supply
+getSplit = Html $ state S.splitSupply
+
+freshTag :: Monad m => HtmlT t m (Tag a)
 freshTag = Html $ Tag <$> state S.freshId
 
-eventTag :: Renderer t => Html t (Event t a, Tag a)
+eventTag :: (Reflex t, Monad m) => HtmlT t m (Event t a, Tag a)
 eventTag = do
   tag <- freshTag
   e <- asks (flip select tag)
   return (e, tag)
 
-build_ :: Renderer t => Builder t a -> Html t ()
-build_  = Html .  tell . Traversal . void
 
-
-build' :: Renderer t =>  Builder t a -> Html t (Event t a)
-build' r = do
-  tag <- freshTag
-  Html . tell $ Traversal (r >>= lift . return_ tag)
-  asks (flip select tag)
-
-build :: (Default a, Switching t a, Renderer t) => Builder t a -> Html t a
+build :: (Default a, Switching t a, MonadWidget t m) => Builder t a -> m a
 build = build' >=> delayed
 
 instance Reflex t => Default (Event t a) where

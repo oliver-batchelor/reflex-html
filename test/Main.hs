@@ -3,6 +3,7 @@
 module Main where
 
 import Reflex
+import Reflex.Monad
 
 import Reflex.Html.Render
 import Reflex.Html.Html
@@ -27,6 +28,24 @@ button' = html' "button"
 h1_ = element_ htmlNs "h1"
 h1' = element' htmlNs "h1"
 
+type Questions = ([String], [String])
+
+form :: Renderer t => [String] -> Html t (Dynamic t [String])
+form questions = workflow start where
+  start = Workflow $ form' questions []
+
+  form' [] ans = do
+    text "All finished"
+    (_, b) <- button' [] $ text "Again!"
+    return (ans, start <$ clicked b)
+  form' (q:qs) ans = do
+    t <- textInput [] $ def
+    (_, b) <-  button' [] $ text "Ok!"
+    let answer = tag (current $ value t) (clicked b)
+    return (ans, Workflow . form' qs . (:ans) <$> answer)
+
+
+
 
 main = htmlBody $ do
   div_ [] $ do
@@ -34,6 +53,8 @@ main = htmlBody $ do
       h1_ [] $ dynText =<< mapDyn (\x -> "hello world" ++ show x) c
       (_, b) <- button' [] $ text "click me"
       (_, h) <- button' [] $ text "hidden"
+
+      p_ [] $ form ["How are you today?", "What is the meaning of life?"]
 
       c <- count (clicked b)
       hidden <- toggle False (clicked h)
