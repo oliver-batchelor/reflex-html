@@ -89,6 +89,10 @@ deriving instance Renderer t => MonadReflexCreateTrigger t (Builder t)
 instance (Renderer t) => Switching t (Builder t ()) where
   switching initial e = buildDyn <$> holdDyn initial e
 
+instance (Renderer t) => SwitchConcat t (Builder t ()) where
+  switchConcat initial e = buildMap e <$> holdMap (UpdatedMap initial e)
+
+
 instance MonadHold t m => MonadHold t (RSST r w s m) where
   hold a0 = lift . hold a0
 
@@ -234,14 +238,16 @@ withParent f = do
   f (envParent env) (envDoc env)
 
 
-deleteExclusive :: (Dom.Node, Dom.Node) -> IO ()
+type Range = (Dom.Node, Dom.Node)
+
+deleteExclusive :: Range -> IO ()
 deleteExclusive (start, end) = traverse_ removeFrom =<< Dom.getParentNode end  where
   removeFrom parent = do
     node <- Dom.getPreviousSibling end
     when (Just start /= node) $ do
       Dom.removeChild parent node >> removeFrom parent
 
-makeRange :: Renderer t => Builder t () -> Builder t (Dom.Node, Dom.Node)
+makeRange :: Renderer t => Builder t () -> Builder t Range
 makeRange b = (,) <$> marker <*> (b >> marker)
 
 
@@ -255,6 +261,31 @@ buildDyn d = do
   request =<< switching req updatedReq
 
   return ()
+
+buildMap :: (Renderer t, Ord k) => Event t (Map k (Maybe (Builder t ()))) -> Behavior t (Map k (Builder t ())) -> Builder t ()
+buildMap e b = do
+  env <- Build ask
+
+  ranges0 <- traverse makeRange =<< sample b
+  end <- marker
+
+  rec
+    ranges  <- hold ranges0 rangeE
+    (reqs, rangesE) <- foldRender Map.union (attach ranges e) $ \(changes, rs) -> do
+      (frags, reqs) <- split <$> traverse (inFragment env) changes
+
+      (reqs,) <$> ifoldlM (updateList end) rs frags
+
+    undefined
+
+  undefined
+
+
+updateList :: Dom.Node -> Map k Range -> Map k Dom.DocumentFragment -> IO (Map k Range)
+updateList end current change = do
+  undefined
+
+
 
 replaceRange :: Renderer t => (Dom.Node, Dom.Node) -> Env t -> Builder t () -> Render t (Request t)
 replaceRange (start, end) env b = do

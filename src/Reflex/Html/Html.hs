@@ -82,21 +82,6 @@ instance (Renderer t, MonadSwitch t m) => MonadWidget t (HtmlT t m) where
     return (a, r)
 
 
--- Helper functions to support the MonadSwitch instance
-split3 :: Functor f => f (a, b, c) -> (f a, f b, f c)
-split3 f = (view _1 <$> f, view _2 <$> f, view _3 <$> f)
-
-runSupplyMap :: (Ord k, Monad m, Renderer t) =>  Map k (HtmlT t m a) ->
-      EventSelector t Tag -> S.Supply -> (Map k (m (a, Build t)), S.Supply)
-runSupplyMap m env = runState (traverse (runSplit env) m)
-
-runSupplyMap' :: (Ord k, Monad m, Renderer t) => EventSelector t Tag ->  S.Supply
-       ->  Map k (Maybe (HtmlT t m a))
-       -> (Map k (Maybe (m (a, Build t))), S.Supply)
-runSupplyMap' env s m =  runState (traverse (traverse (runSplit env)) m) s
-
-runSplit :: (Monad m, Renderer t) => EventSelector t Tag -> HtmlT t m a -> State S.Supply (m (a, Build t))
-runSplit env (Html m) = evalRSST m env <$> state S.splitSupply
 
 instance (Renderer t, MonadSwitch t m) => MonadSwitch t (HtmlT t m) where
   switchM (Updated initial e) = do
@@ -168,5 +153,19 @@ htmlBody html = do
 
 
 
+-- Helper functions to support the MonadSwitch instance
+split3 :: Functor f => f (a, b, c) -> (f a, f b, f c)
+split3 f = (view _1 <$> f, view _2 <$> f, view _3 <$> f)
 
+runSupplyMap :: (Ord k, Monad m, Renderer t) =>  Map k (HtmlT t m a) ->
+      EventSelector t Tag -> S.Supply -> (Map k (m (a, Build t)), S.Supply)
+runSupplyMap m env = runState (traverse (runSplit env) m)
+
+runSupplyMap' :: (Ord k, Monad m, Renderer t) => EventSelector t Tag ->  S.Supply
+       ->  Map k (Maybe (HtmlT t m a))
+       -> (Map k (Maybe (m (a, Build t))), S.Supply)
+runSupplyMap' env s m =  runState (traverse (traverse (runSplit env)) m) s
+
+runSplit :: (Monad m, Renderer t) => EventSelector t Tag -> HtmlT t m a -> State S.Supply (m (a, Build t))
+runSplit env (Html m) = evalRSST m env <$> state S.splitSupply
 
