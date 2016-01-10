@@ -8,7 +8,7 @@ import Reflex.Monad
 import Reflex.Html.Html
 import Reflex.Html.Input
 import Reflex.Html.Element
-import Reflex.Html.HtmlElements
+import Reflex.Html.Elements.Html
 
 import Reflex.Html.Prelude
 

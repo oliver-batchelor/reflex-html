@@ -33,10 +33,10 @@ library
     Reflex.Html.Input,
     Reflex.Html.Prelude,
     Reflex.Html.Element,
-    Reflex.Html.HtmlElements
+    Reflex.Html.Elements.Html,
+    Reflex.Html.DomString
   other-modules:
-    Data.Unsafe.Tag,
-    Reflex.Dirty
+    Data.Unsafe.Tag
   
   hs-source-dirs: src
   build-depends:

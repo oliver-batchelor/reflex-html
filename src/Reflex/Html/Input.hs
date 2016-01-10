@@ -15,6 +15,7 @@ import Reflex.Html.Html
 import Reflex.Html.Render
 import Reflex.Html.Element
 import Reflex.Html.Prelude
+import Reflex.Html.Elements.Html
 
 import qualified Data.Map as Map
 import Control.Lens
@@ -98,19 +99,7 @@ makeInput setter getter config create = do
 
   return $ InputElement value changes events
 
-stringAttr :: DomString -> Attr DomString
-stringAttr = Attr Just
 
-boolAttr :: DomString -> Attr Bool
-boolAttr = Attr $ \case
-  True  -> Just "true"
-  False -> Nothing
-
-type_ :: Attr DomString
-type_ = stringAttr "type"
-
-hidden_ :: Attr Bool
-hidden_ = boolAttr "hidden"
 
 textInput :: MonadWidget t m => [Attribute t] -> InputConfig t DomString -> m (InputElement t DomString)
 textInput attrs config = do

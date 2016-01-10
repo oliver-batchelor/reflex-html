@@ -20,6 +20,8 @@ module Reflex.Html.Prelude
 
   , Map
   , DomString
+  , domShow
+
   ) where
 
 import Data.Map (Map)
@@ -33,7 +35,7 @@ import Data.Semigroup
 import Reflex
 import Reflex.Monad
 import Reflex.Monad.Class
-import Reflex.Html.DomString (DomString)
+import Reflex.Html.DomString (DomString, domShow)
 
 import Control.Monad.Fix
 import Control.Monad.Reader.Class

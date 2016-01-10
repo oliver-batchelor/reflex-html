@@ -50,11 +50,43 @@ instance Contravariant Attr where
 option :: Attr a -> Attr (Maybe a)
 option (Attr toStr name) = Attr (>>= toStr) name where
 
-many :: Attr a -> Attr [a]
-many (Attr toStr name) =  Attr toStr' name where
+manySep :: DomString -> Attr a -> Attr [a]
+manySep sep (Attr toStr name) =  Attr toStr' name where
   toStr' xs = case (catMaybes (toStr <$> xs)) of
       []  -> Nothing
-      strs -> Just $ S.intercalate " " strs
+      strs -> Just $ S.intercalate sep strs
+
+commaSep :: Attr a -> Attr [a]
+commaSep = manySep ","
+
+spaceSep :: Attr a -> Attr [a]
+spaceSep = manySep " "
+
+showA :: Show a => DomString -> Attr a
+showA = contramap domShow . strA
+
+strA :: DomString -> Attr DomString
+strA name = Attr Just name
+
+commaListA :: DomString -> Attr [DomString]
+commaListA = commaSep . strA
+
+spaceListA :: DomString -> Attr [DomString]
+spaceListA = spaceSep . strA
+
+boolA :: DomString -> Attr Bool
+boolA = Attr (\b -> if b then Just "" else Nothing)
+
+intA :: DomString -> Attr Int
+intA = showA
+
+floatA :: DomString -> Attr Float
+floatA = showA
+
+boolA' :: DomString -> DomString -> DomString -> Attr Bool
+boolA' t f = contramap fromBool . strA
+  where fromBool b = if b then t else f
+
 
 
 data ElementType = ElementType
@@ -84,8 +116,6 @@ holdAttributes attrs = do
     fromRight (Right a) = Just a
     fromRight _         = Nothing
 
-htmlNs :: DomString
-htmlNs = "http://www.w3.org/1999/xhtml"
 
 text :: MonadWidget t m => DomString -> m ()
 text str = build $ void $ buildText str
@@ -97,7 +127,7 @@ dynText d = build $ do
 
 
 el_ :: MonadWidget t m => ElementType -> [Attribute t] -> m () -> m (Element t)
-el_ e attrs = fmap snd . el' e attrs
+el_ e attrs = fmap fst . el' e attrs
 
 el :: MonadWidget t m => ElementType -> [Attribute t] -> m a -> m a
 el e attrs child = do
@@ -106,11 +136,11 @@ el e attrs child = do
   build $ void $ buildElement (elemNs e) (elemTag e) dynAttrs r
   return a
 
-el' :: MonadWidget t m => ElementType -> [Attribute t] -> m a -> m (a, Element t)
+el' :: MonadWidget t m => ElementType -> [Attribute t] -> m a -> m (Element t, a)
 el' e attrs child = do
   (a, r) <- collectBuild child
   dynAttrs <- holdAttributes attrs
   events <- switchBuild $
       buildElement (elemNs e) (elemTag e) dynAttrs r >>= bindEvents . fst
-  return (a, Element events)
+  return (Element events, a)
 
