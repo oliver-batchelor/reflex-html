@@ -1,5 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, ScopedTypeVariables, RankNTypes, TupleSections, GADTs, TemplateHaskell, ConstraintKinds, StandaloneDeriving, UndecidableInstances, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, LambdaCase, ImpredicativeTypes #-}
-
+{-# LANGUAGE UndecidableInstances, ImpredicativeTypes #-}
 module Reflex.Html.Render  where
 
 import qualified GHCJS.DOM as Dom
@@ -24,25 +23,18 @@ import Data.Dependent.Sum
 import Data.Dependent.Map (DMap)
 import qualified Data.Dependent.Map as DMap
 
-import Data.Maybe
 import Data.Proxy
-import Data.Map (Map)
 import qualified Data.Map as Map
 
-
-import Data.Foldable
-import Data.Functor.Misc
-
-import Reflex
-import Reflex.Dirty
 import Reflex.Host.Class
 
 import Data.IORef
+import Data.Functor.Misc
 import Data.Unsafe.Tag
-import Reflex.Html.Event
-import Reflex.Monad
 
-import Control.Monad.Ref
+
+import Reflex.Html.Event
+import Reflex.Html.Prelude
 
 import qualified Data.List.NonEmpty as NE
 import Data.Semigroup.Applicative
@@ -61,29 +53,41 @@ data Env t = Env
   }
 
 type TriggerRef t a = IORef (Maybe (EventTrigger t a))
-type Renderer t = (ReflexHost t, MonadIO (HostFrame t))
-
-type RequestT t m = Behavior t (Traversal m)
-type Request t = RequestT t (RenderT t (HostFrame t))
-
 data TriggerOcc t = forall a. TriggerOcc (TriggerRef t a) a
 
+type Renderer t = (ReflexHost t, MonadIO (HostFrame t))
+type Request t = Behavior t (Traversal (Render t))
 
 data RenderEvents t = RenderEvents
   { rsFan      :: DMap Tag
   , rsTriggers :: [TriggerOcc t]
   }
 
-newtype RenderT t m a = Render { unRender :: StateT (RenderEvents t) m a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadSample t, MonadHold t,
-           MonadIO, MonadState (RenderEvents t), MonadReflexCreateTrigger t)
+newtype Render t a = Render { unRender :: StateT (RenderEvents t) (HostFrame t) a }
 
-newtype BuilderT t m a = Build { unBuild :: RSST (Env t) () [RequestT t m]  m a }
-  deriving (Functor, Applicative, Monad, MonadFix, MonadIO, MonadHold t, MonadSample t,
-           MonadReader (Env t),  MonadState [RequestT t m], MonadReflexCreateTrigger t)
+deriving instance Renderer t => Functor (Render t)
+deriving instance Renderer t => Applicative (Render t)
+deriving instance Renderer t => Monad (Render t)
+deriving instance Renderer t => MonadFix (Render t)
+deriving instance Renderer t => MonadIO (Render t)
+deriving instance Renderer t => MonadSample t (Render t)
+deriving instance Renderer t => MonadHold t (Render t)
+deriving instance Renderer t => MonadReflexCreateTrigger t (Render t)
 
-instance MonadTrans (BuilderT t) where
-  lift = Build . lift
+newtype Builder t a = Build { unBuild :: RSST (Env t) () [Request t]  (Render t) a }
+
+deriving instance Renderer t => Functor (Builder t)
+deriving instance Renderer t => Applicative (Builder t)
+deriving instance Renderer t => Monad (Builder t)
+deriving instance Renderer t => MonadFix (Builder t)
+deriving instance Renderer t => MonadIO (Builder t)
+deriving instance Renderer t => MonadSample t (Builder t)
+deriving instance Renderer t => MonadHold t (Builder t)
+deriving instance Renderer t => MonadReflexCreateTrigger t (Builder t)
+
+
+instance (Renderer t) => Switching t (Builder t ()) where
+  switching initial e = buildDyn <$> holdDyn initial e
 
 instance MonadHold t m => MonadHold t (RSST r w s m) where
   hold a0 = lift . hold a0
@@ -97,16 +101,14 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (RSST r w s 
 
 type DynMap t k a = (Behavior t (Map k a), Event t (Map k (Maybe a)))
 
-type Builder t a = BuilderT t (RenderT t (HostFrame t)) a
-type Render t a = RenderT t (HostFrame t) a
-
+type Events t = EventSelector t (WrapArg EventResult EventName)
 type EventsHandler f e en  = (forall en. EventName en -> Dom.EventM  e (EventType en)  (Maybe (f en)))
 
 askDocument :: Renderer t => Builder t Dom.Document
-askDocument = asks envDoc
+askDocument = Build $ asks envDoc
 
 askPostAsync :: Renderer t => Builder t (DSum (EventTrigger t) -> IO ())
-askPostAsync = post <$> asks envChan
+askPostAsync = post <$> Build (asks envChan)
   where post chan tv = writeChan chan tv
 
 
@@ -128,12 +130,12 @@ renderTriggers tr events = do
     where readTrigger = readTriggerRef (Proxy :: Proxy t)
 
 return_ :: Renderer t => Tag a -> a -> Render t ()
-return_ tag a = modify insertFan where
+return_ tag a = Render $ modify insertFan where
   insertFan re = re { rsFan = DMap.insert tag a (rsFan re) }
 
 
 trigger :: Renderer t => TriggerRef t a -> a -> Render t ()
-trigger tr a = modify insertFan where
+trigger tr a = Render $ modify insertFan where
   insertFan re = re { rsTriggers = (TriggerOcc tr a) : rsTriggers re }
 
 newTriggerRef :: (MonadIO m, MonadReflexCreateTrigger t m) => m (Event t a, IORef (Maybe (EventTrigger t a)))
@@ -155,11 +157,12 @@ holdReset e reset = hold Nothing $ leftmost [Just <$> e, Nothing <$ reset]
 
 
 foldReset :: (MonadReflex t m) => (a -> a -> a) -> Event t a -> Event t b -> m (Behavior t (Maybe a))
-foldReset f e reset = current <$> foldDyn f' Nothing (leftmost [Just <$> e, Nothing <$ reset])
-  where
-    f' Nothing   _ = Nothing
-    f' (Just a)  Nothing = Just a
-    f' (Just a) (Just b) = Just (f a b)
+foldReset f e reset = current <$> foldDyn accum Nothing inp where
+  inp = leftmost [Just <$> e, Nothing <$ reset]
+
+  accum Nothing   _ = Nothing
+  accum (Just a)  Nothing = Just a
+  accum (Just a) (Just b) = Just (f a b)
 
 
 render :: Renderer t => Event t a -> (a -> Render t b) -> Builder t (Event t b)
@@ -170,28 +173,27 @@ foldRender :: Renderer t => (a -> a -> a) -> Event t a -> (a -> Render t b) -> B
 foldRender f = renderWith (foldReset f)
 
 request :: Renderer t => Request t -> Builder t ()
-request r = modify (r :)
+request r = Build $ modify (r :)
+
+renderAlways :: Renderer t => Behavior t a -> (a -> Render t ()) -> Builder t ()
+renderAlways b f = request $ Traversal . f <$> b
 
 renderWith :: Renderer t => (Event t a -> Event t b -> Builder t (Behavior t (Maybe a)))
            -> Event t a -> (a -> Render t b) -> Builder t (Event t b)
-renderWith f e toRender = do
-  (result, fire) <- lift newEvent
-  r <- f e result
+renderWith accumReset e toRender = do
+  (result, fire) <- Build $ lift newEvent
+  r <- accumReset e result
   let run = maybe mempty (Traversal . (fire <=< toRender))
   request (run <$> r)
   return result
 
-
-
 fireTriggerRef :: (MonadIO m, MonadReflexHost t m) => TriggerRef t a -> a -> m ()
 fireTriggerRef tr a = liftIO (readIORef tr) >>= traverse_ (\t -> fireEvents [t :=> a])
-
 
 runBuilder ::  Renderer t =>  Env t -> Builder t a -> Render t (a, Request t)
 runBuilder env (Build build) = do
   (a, reqs, _) <- runRSST build env []
   return (a, mconcat reqs)
-
 
 runRender ::  TriggerRef Impl (DMap Tag) -> Render Impl a -> Host a
 runRender tr (Render render) = do
@@ -209,7 +211,7 @@ runAsync input action = forkIO $ forever $ do
 
 
 buildBody :: TriggerRef Impl (DMap Tag) -> Builder Impl () -> IO ()
-buildBody tr build = Dom.runWebGUI $ \webView -> do
+buildBody tr build = Dom.runWebGUI $ \webView -> void $ do
   Dom.enableInspector webView
   Just doc <- Dom.webViewGetDomDocument webView
   env <- Env doc
@@ -222,14 +224,13 @@ buildBody tr build = Dom.runWebGUI $ \webView -> do
 
   runAsync (readChan (envChan env))
            (runHost . fireEvents . pure)
-  return ()
 
     where
       frameRate = 30
 
 withParent :: Renderer t =>  (Dom.Node -> Dom.Document -> Builder t a) -> Builder t a
 withParent f = do
-  env <- ask
+  env <- Build ask
   f (envParent env) (envDoc env)
 
 
@@ -246,10 +247,9 @@ makeRange b = (,) <$> marker <*> (b >> marker)
 
 buildDyn :: Renderer t => Dynamic t (Builder t ()) -> Builder t ()
 buildDyn d = do
-  env <- ask
-
+  env <- Build ask
   (r, req) <- makeRange <$> sample (current d) >>=
-    lift . runBuilder env
+    Build . lift . runBuilder env
 
   updatedReq <- render (updated d) $ replaceRange r env
   request =<< switching req updatedReq
@@ -273,7 +273,7 @@ inFragment env b = do
 
 
 
-buildElement_ :: Renderer t => String -> String -> DynMap t String String -> Builder t Dom.Element
+buildElement_ :: Renderer t => DomString -> DomString -> DynMap t DomString DomString -> Builder t Dom.Element
 buildElement_ ns tag (currentA, updatedA) = withParent $ \parent doc -> do
   Just e <- liftIO $ Doc.createElementNS doc (Just ns) (Just tag)
   sample currentA >>= imapM_ (Dom.setAttribute e)
@@ -283,27 +283,27 @@ buildElement_ ns tag (currentA, updatedA) = withParent $ \parent doc -> do
   liftIO $ Dom.appendChild parent $ Just e
   return e
 
-addRemove :: Dom.Element -> String -> Maybe String -> IO ()
+addRemove :: Dom.Element -> DomString -> Maybe DomString -> IO ()
 addRemove e name (Just v) = Dom.setAttribute e name v
 addRemove e name Nothing  = Dom.removeAttribute e name
 
 marker :: Renderer t => Builder t Dom.Node
 marker = Dom.toNode <$> buildText ""
 
-buildText :: Renderer t => String -> Builder t Dom.Text
+buildText :: Renderer t => DomString -> Builder t Dom.Text
 buildText str = withParent $ \parent doc -> liftIO $ do
   Just dom <- Doc.createTextNode doc str
   void $ Dom.appendChild parent $ Just dom
   return dom
 
-updateText :: MonadIO m => Dom.Text -> String -> m ()
+updateText :: MonadIO m => Dom.Text -> DomString -> m ()
 updateText text =  liftIO . void . Dom.setData text . Just
 
 
-buildElement :: Renderer t => String -> String -> DynMap t String String -> Builder t a -> Builder t (Dom.Element, a)
-buildElement ns tag attrs child = do
+buildElement :: Renderer t => DomString -> DomString -> DynMap t DomString DomString -> Builder t a -> Builder t (Dom.Element, a)
+buildElement ns tag attrs (Build child) = do
   dom <- buildElement_ ns tag attrs
-  a <- local (reParent (Dom.toNode dom)) child
+  a <- Build $ local (reParent (Dom.toNode dom)) child
   return (dom, a)
 
   where
@@ -320,10 +320,10 @@ wrapDomEventMaybe element eventName getValue = do
       getValue >>= liftIO . traverse_ (\v -> postAsync (et :=> v))
 
 
-type Events t = EventSelector t (WrapArg EventResult EventName)
 
 bindEvents :: (Renderer t, Dom.IsElement e) => e -> Builder t (Events t)
-bindEvents dom = wrapDomEventsMaybe dom (defaultDomEventHandler dom)
+bindEvents e = wrapDomEventsMaybe e (defaultDomEventHandler e)
+
 
 wrapDomEventsMaybe :: (Renderer t, Dom.IsElement e) => e -> EventsHandler f e en -> Builder t (EventSelector t (WrapArg f EventName))
 wrapDomEventsMaybe element handlers = do

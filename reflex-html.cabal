@@ -30,7 +30,10 @@ library
     Reflex.Html.Html,
     Reflex.Html.Render,
     Reflex.Html.Event,
-    Reflex.Html.Input
+    Reflex.Html.Input,
+    Reflex.Html.Prelude,
+    Reflex.Html.Element,
+    Reflex.Html.HtmlElements
   other-modules:
     Data.Unsafe.Tag,
     Reflex.Dirty
@@ -56,12 +59,11 @@ library
     transformers,
     mtl,
     dlist,
-    ref-tf,
+    text,
     stateWriter >= 0.2.6
   
   default-language: Haskell2010
-  default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, TupleSections, EmptyDataDecls, RecursiveDo, ScopedTypeVariables, 
-                      FlexibleContexts, FlexibleInstances, GADTs, RankNTypes, TypeFamilies, DataKinds, ConstraintKinds, NoMonomorphismRestriction, LambdaCase
+  default-extensions: GeneralizedNewtypeDeriving, DeriveGeneric, TupleSections, EmptyDataDecls, RecursiveDo, ScopedTypeVariables, OverloadedStrings, StandaloneDeriving, MultiParamTypeClasses, FlexibleContexts, FlexibleInstances, GADTs, RankNTypes, TypeFamilies, FunctionalDependencies, DataKinds, ConstraintKinds, NoMonomorphismRestriction, LambdaCase, RecordWildCards
 
 
   
