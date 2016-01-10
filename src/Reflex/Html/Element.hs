@@ -118,10 +118,10 @@ holdAttributes attrs = do
 
 
 text :: MonadWidget t m => DomString -> m ()
-text str = build $ void $ buildText str
+text str = build_ $ void $ buildText str
 
 dynText :: MonadWidget t m => Dynamic t DomString -> m ()
-dynText d = build $ do
+dynText d = build_ $ do
   text <- sample (current d) >>= buildText
   void $ render (updated d) $ updateText text
 
@@ -131,14 +131,14 @@ el_ e attrs = fmap fst . el' e attrs
 
 el :: MonadWidget t m => ElementType -> [Attribute t] -> m a -> m a
 el e attrs child = do
-  (a, r) <- collectBuild child
+  (a, r) <- runChild child
   dynAttrs <- holdAttributes attrs
-  build $ void $ buildElement (elemNs e) (elemTag e) dynAttrs r
+  build_ $ void $ buildElement (elemNs e) (elemTag e) dynAttrs r
   return a
 
 el' :: MonadWidget t m => ElementType -> [Attribute t] -> m a -> m (Element t, a)
 el' e attrs child = do
-  (a, r) <- collectBuild child
+  (a, r) <- runChild child
   dynAttrs <- holdAttributes attrs
   events <- switchBuild $
       buildElement (elemNs e) (elemTag e) dynAttrs r >>= bindEvents . fst

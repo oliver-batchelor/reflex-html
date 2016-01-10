@@ -1,9 +1,9 @@
-
-{-# LANGUAGE ConstraintKinds, RankNTypes, GADTs, TemplateHaskell, ConstraintKinds, StandaloneDeriving, UndecidableInstances, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 module Reflex.Html.Html  where
 
 import Control.Monad.Trans.RSS.Strict
+import Control.Monad.State
 import Control.Lens hiding (Traversal, runTraversal)
 
 import Data.Dependent.Map (DMap)
@@ -24,10 +24,12 @@ import Data.Unsafe.Tag
 
 import Reflex.Html.Prelude
 
+type Build t = Traversal (Builder t)
+
 newtype HtmlT t m a = Html
   { unHtml :: RSST
       (EventSelector t Tag)
-      (Traversal (Builder t))
+      (Build t)
       S.Supply
         m a
   }
@@ -38,9 +40,16 @@ newtype HtmlT t m a = Html
 type Html t a = HtmlT t (ReflexM t) a
 
 class (Renderer t, MonadSwitch t m) => MonadWidget t m where
-  build        :: Builder t ()   -> m ()
-  returnBuild  :: Builder t a   -> m (Event t a)
-  collectBuild :: m a           -> m (a, Builder t ())
+  build_ :: Builder t ()  -> m ()
+  build  :: Builder t a   -> m (Event t a)
+  runChild  :: m a        -> m (a, Builder t ())
+
+  -- Default instances for MonadTrans transformers
+  default build_ :: (MonadTrans u, MonadSwitch t (u m)) => Builder t () -> u m ()
+  build_ = lift . build_
+
+  default build :: (MonadTrans u, MonadSwitch t (u m)) => Builder t a -> u m (Event t a)
+  build = lift . build
 
 
 instance Reflex t => Default (Event t a) where
@@ -60,22 +69,34 @@ instance Reflex t => Switching t (EventSelector t k) where
 
 
 instance (Renderer t, MonadSwitch t m) => MonadWidget t (HtmlT t m) where
-  build  = Html .  tell . Traversal . void
+  build_  = Html .  tell . Traversal . void
 
-  returnBuild r = do
+  build r = do
     tag <- freshTag
     Html . tell . Traversal . return' $ tag
     asks (flip select tag)
       where return' tag = r >>= Build . lift . return_ tag
 
-  collectBuild (Html m) = Html $ do
+  runChild (Html m) = Html $ do
     (a, Traversal r) <- collectRSST m
     return (a, r)
 
 
+-- Helper functions to support the MonadSwitch instance
 split3 :: Functor f => f (a, b, c) -> (f a, f b, f c)
 split3 f = (view _1 <$> f, view _2 <$> f, view _3 <$> f)
 
+runSupplyMap :: (Ord k, Monad m, Renderer t) =>  Map k (HtmlT t m a) ->
+      EventSelector t Tag -> S.Supply -> (Map k (m (a, Build t)), S.Supply)
+runSupplyMap m env = runState (traverse (runSplit env) m)
+
+runSupplyMap' :: (Ord k, Monad m, Renderer t) => EventSelector t Tag ->  S.Supply
+       ->  Map k (Maybe (HtmlT t m a))
+       -> (Map k (Maybe (m (a, Build t))), S.Supply)
+runSupplyMap' env s m =  runState (traverse (traverse (runSplit env)) m) s
+
+runSplit :: (Monad m, Renderer t) => EventSelector t Tag -> HtmlT t m a -> State S.Supply (m (a, Build t))
+runSplit env (Html m) = evalRSST m env <$> state S.splitSupply
 
 instance (Renderer t, MonadSwitch t m) => MonadSwitch t (HtmlT t m) where
   switchM (Updated initial e) = do
@@ -86,11 +107,24 @@ instance (Renderer t, MonadSwitch t m) => MonadSwitch t (HtmlT t m) where
         switchM (Updated (run env s initial) $ attachWith (run env) r e))
       r <- hold' us
 
-    build =<< switching' (getTraversal <$> b)
+    build_ =<< switching' (getTraversal <$> b)
     return a
 
     where
       run env s (Html m) = runRSST m env s
+
+  switchMapM (UpdatedMap initial e) = do
+    env <- ask
+    (initial', s) <- runSupplyMap initial env <$> getSplit
+
+    rec
+      let (um, us) = split $ attachWith (runSupplyMap' env) r e
+      a <- lift (switchMapM (UpdatedMap initial' um))
+      r <- hold s us
+
+    build_ =<< switchConcat' (getTraversal . snd <$> a)
+    return (fst <$> a)
+
 
 
 getSplit :: Monad m => HtmlT t m S.Supply
@@ -107,13 +141,13 @@ eventTag = do
 
 
 switchBuild :: (Default a, Switching t a, MonadWidget t m) => Builder t a -> m a
-switchBuild = returnBuild >=> delayed
+switchBuild = build >=> delayed
 
 delayed :: (MonadReflex t m, Default a, Switching t a) => Event t a -> m a
 delayed = switching def
 
 holdBuild :: MonadWidget t m => Builder t a -> m (Behavior t (Maybe a))
-holdBuild r = hold Nothing =<< fmap Just <$> returnBuild r
+holdBuild r = hold Nothing =<< fmap Just <$> build r
 
 
 
