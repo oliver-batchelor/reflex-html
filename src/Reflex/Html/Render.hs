@@ -254,37 +254,34 @@ makeRange b = (,) <$> marker <*> (b >> marker)
 buildDyn :: Renderer t => Dynamic t (Builder t ()) -> Builder t ()
 buildDyn d = do
   env <- Build ask
-  (r, req) <- makeRange <$> sample (current d) >>=
+  (range, req) <- makeRange <$> sample (current d) >>=
     Build . lift . runBuilder env
 
-  updatedReq <- render (updated d) $ replaceRange r env
+  updatedReq <- render (updated d) $ replaceRange range env
   request =<< switching req updatedReq
 
-  return ()
+
+splitF :: (Functor f, Functor g) => f (g (a, b)) -> (f (g a), f (g b))
+splitF f = (fmap fst <$> f, fmap snd <$> f)
 
 buildMap :: (Renderer t, Ord k) => Event t (Map k (Maybe (Builder t ()))) -> Behavior t (Map k (Builder t ())) -> Builder t ()
 buildMap e b = do
   env <- Build ask
-
-  ranges0 <- traverse makeRange =<< sample b
+  let run = Build . lift . runBuilder env . makeRange
+  (ranges0, reqs0) <- split <$> (traverse run =<< sample b)
   end <- marker
 
   rec
-    ranges  <- hold ranges0 rangeE
-    (reqs, rangesE) <- foldRender Map.union (attach ranges e) $ \(changes, rs) -> do
-      (frags, reqs) <- split <$> traverse (inFragment env) changes
+    ranges  <- hold ranges0 rangeChanges
+    (updatedReqs, rangeChanges) <- fmap split $ foldRender Map.union e $ \changes -> do
+      (frags, reqs) <- splitF <$> traverse (traverse (inFragment env)) changes
+      (reqs, ) <$> (liftIO . updateList end frags =<< sample ranges)
 
-      (reqs,) <$> ifoldlM (updateList end) rs frags
+  request =<< switchConcat reqs0 updatedReqs
 
-    undefined
-
-  undefined
-
-
-updateList :: Dom.Node -> Map k Range -> Map k Dom.DocumentFragment -> IO (Map k Range)
-updateList end current change = do
-  undefined
-
+updateList :: Dom.Node -> Map k (Maybe Dom.DocumentFragment) -> Map k Range -> IO (Map k Range)
+updateList end frags ranges = ifoldlM update ranges frags where
+  update = undefined
 
 
 replaceRange :: Renderer t => (Dom.Node, Dom.Node) -> Env t -> Builder t () -> Render t (Request t)
