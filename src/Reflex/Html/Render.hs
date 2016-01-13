@@ -92,9 +92,7 @@ instance (Renderer t) => Switching t (Builder t ()) where
 instance (Renderer t) => SwitchConcat t (Builder t ()) where
   switchConcat initial e = buildMap e <$> holdMap (UpdatedMap initial e)
 
-
-instance MonadHold t m => MonadHold t (RSST r w s m) where
-  hold a0 = lift . hold a0
+instance MonadHold t m => MonadHold t (RSST r w s m)
 
 instance MonadSample t m => MonadSample t (RSST r w s m) where
   sample = lift . sample
@@ -240,12 +238,20 @@ withParent f = do
 
 type Range = (Dom.Node, Dom.Node)
 
-deleteExclusive :: Range -> IO ()
-deleteExclusive (start, end) = traverse_ removeFrom =<< Dom.getParentNode end  where
+removeBetween :: Range -> IO ()
+removeBetween (start, end) = traverse_ removeFrom =<< Dom.getParentNode end  where
   removeFrom parent = do
     node <- Dom.getPreviousSibling end
     when (Just start /= node) $ do
       Dom.removeChild parent node >> removeFrom parent
+
+removeStart :: Range -> IO ()
+removeStart (start, end) = traverse_ removeFrom =<< Dom.getParentNode end  where
+  removeFrom parent = do
+    node <- Dom.getPreviousSibling end
+    Dom.removeChild parent node
+    when (Just start /= node) $ removeFrom parent
+
 
 makeRange :: Renderer t => Builder t () -> Builder t Range
 makeRange b = (,) <$> marker <*> (b >> marker)
@@ -260,43 +266,64 @@ buildDyn d = do
   updatedReq <- render (updated d) $ replaceRange range env
   request =<< switching req updatedReq
 
-
 splitF :: (Functor f, Functor g) => f (g (a, b)) -> (f (g a), f (g b))
 splitF f = (fmap fst <$> f, fmap snd <$> f)
+
+
 
 buildMap :: (Renderer t, Ord k) => Event t (Map k (Maybe (Builder t ()))) -> Behavior t (Map k (Builder t ())) -> Builder t ()
 buildMap e b = do
   env <- Build ask
-  let run = Build . lift . runBuilder env . makeRange
-  (ranges0, reqs0) <- split <$> (traverse run =<< sample b)
+  let run = Build . lift . inFragment env
+  (frags0, reqs0) <- split <$> (traverse run =<< sample b)
+
   end <- marker
+  markers0 <- liftIO $ Map.mapMaybe id <$>
+    traverse (insertFragmentBefore end) frags0
 
+
+  let renderChanges changes markers = do
+        (frags, reqs) <- splitF <$> traverse (traverse (inFragment env)) changes
+        (reqs, ) <$> updateList end frags markers
   rec
-    ranges  <- hold ranges0 rangeChanges
-    (updatedReqs, rangeChanges) <- fmap split $ foldRender Map.union e $ \changes -> do
-      (frags, reqs) <- splitF <$> traverse (traverse (inFragment env)) changes
-      (reqs, ) <$> (liftIO . updateList end frags =<< sample ranges)
+    currentMarkers  <- hold markers0 markerE
+    (reqE, markerE) <- split <$> foldRender Map.union e
+      (\cs -> renderChanges cs =<< sample currentMarkers)
 
-  request =<< switchConcat reqs0 updatedReqs
+  request =<< switchConcat reqs0 reqE
 
-updateList :: Dom.Node -> Map k (Maybe Dom.DocumentFragment) -> Map k Range -> IO (Map k Range)
-updateList end frags ranges = ifoldlM update ranges frags where
-  update = undefined
+
+insertFragmentBefore :: Dom.Node -> Dom.DocumentFragment -> IO (Maybe Dom.Node)
+insertFragmentBefore node frag = do
+  Just parent <- Dom.getParentNode node
+  first <- Dom.getFirstChild frag
+  Dom.insertBefore parent (Just frag) (Just node)
+  return first
+
+updateList :: (Renderer t, Ord k) => Dom.Node -> Map k (Maybe Dom.DocumentFragment) -> Map k Dom.Node -> Render t (Map k Dom.Node)
+updateList end frags markers' = liftIO $ ifoldrM insertRemove markers' frags where
+  insertRemove k mayFrag markers = do
+    traverse_ removeStart range
+    start <- traverse (insertFragmentBefore next) mayFrag
+    return (Map.alter (const (join start)) k markers)
+      where
+        range = (,next) <$> Map.lookup k markers
+        next = fromMaybe end (snd <$> Map.lookupGT k markers)
 
 
 replaceRange :: Renderer t => (Dom.Node, Dom.Node) -> Env t -> Builder t () -> Render t (Request t)
 replaceRange (start, end) env b = do
   (frag, req) <- inFragment env b
   liftIO $ do
-    deleteExclusive (start, end)
+    removeBetween (start, end)
     Dom.insertBefore (envParent env) (Just frag) (Just end)
   return req
 
 
-inFragment :: Renderer t => Env t -> Builder t () -> Render t (Dom.DocumentFragment, Request t)
+inFragment :: Renderer t => Env t -> Builder t a -> Render t (Dom.DocumentFragment, Request t)
 inFragment env b = do
   (Just frag) <- liftIO $ Doc.createDocumentFragment (envDoc env)
-  (_, req) <- runBuilder (env {envParent = Dom.toNode frag}) b
+  (a, req) <- runBuilder (env {envParent = Dom.toNode frag}) b
   return (frag, req)
 
 
@@ -317,6 +344,8 @@ addRemove e name Nothing  = Dom.removeAttribute e name
 
 marker :: Renderer t => Builder t Dom.Node
 marker = Dom.toNode <$> buildText ""
+
+
 
 buildText :: Renderer t => DomString -> Builder t Dom.Text
 buildText str = withParent $ \parent doc -> liftIO $ do

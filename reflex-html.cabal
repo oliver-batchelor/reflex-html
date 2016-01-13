@@ -41,7 +41,7 @@ library
   hs-source-dirs: src
   build-depends:
     base,
-    reflex >= 0.4.1, 
+    reflex >= 0.4.2, 
     reflex-transformers,
     ghcjs-dom >= 0.2.3,
     containers,

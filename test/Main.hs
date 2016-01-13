@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings,  NoMonomorphismRestriction, FlexibleContexts, RecursiveDo #-}
+{-# LANGUAGE OverloadedStrings,  NoMonomorphismRestriction, FlexibleContexts, RecursiveDo, TupleSections #-}
 
 module Main where
 
@@ -27,14 +27,21 @@ myForm questions = workflow start where
     b <- button_ [] $ text "Again!"
     return (ans, start <$ clicked b)
   form' (q:qs) ans = do
-
-    text q >> br []
-    t <- textInput [] $ def
-    b <-  button_  [] $ text "Ok!"
-    dynText (value t)
-
-    let answer = tag (current $ value t) (clicked b)
+    answer <- inputOk q
     return (ans, Workflow . form' qs . (: ans)  <$> answer)
+
+
+inputOk :: MonadWidget t m => DomString -> m (Event t DomString)
+inputOk q = do
+  text q >> br []
+  t <- textInput [] $ def
+  b <-  button_  [] $ text "Ok!"
+  dynText (value t)
+
+  return $ tag (current $ value t) (clicked b)
+
+inputOk' :: MonadWidget t m => DomString -> m ((), Event t ())
+inputOk' = fmap (\e -> ((), void e)) . inputOk
 
 
 main = htmlBody widget
@@ -45,6 +52,11 @@ widget = div [] $ do
     h1_ [] $ dynText =<< mapDyn (\x -> "hello world" <> fromString (show x)) c
     b <- button_ [] $ text "click me"
     h <- button_ [] $ text "hidden"
+    new <- button_ [] $ text "add new"
+
+    m <- holdMapDyn =<< collection (inputOk' <$> ["1", "2"]) ([inputOk' "new item"] <$ clicked new)
+    p [] $ dynText =<< mapDyn (fromString . show) m
+
 
     p [] $ myForm ["How are you today?", "What is the meaning of life?"]
 
