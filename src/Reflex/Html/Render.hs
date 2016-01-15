@@ -270,7 +270,6 @@ splitF :: (Functor f, Functor g) => f (g (a, b)) -> (f (g a), f (g b))
 splitF f = (fmap fst <$> f, fmap snd <$> f)
 
 
-
 buildMap :: (Renderer t, Ord k) => Event t (Map k (Maybe (Builder t ()))) -> Behavior t (Map k (Builder t ())) -> Builder t ()
 buildMap e b = do
   env <- Build ask
@@ -278,9 +277,7 @@ buildMap e b = do
   (frags0, reqs0) <- split <$> (traverse run =<< sample b)
 
   end <- marker
-  markers0 <- liftIO $ Map.mapMaybe id <$>
-    traverse (insertFragmentBefore end) frags0
-
+  markers0 <- buildList end frags0
 
   let renderChanges changes markers = do
         (frags, reqs) <- splitF <$> traverse (traverse (inFragment env)) changes
@@ -300,7 +297,10 @@ insertFragmentBefore node frag = do
   Dom.insertBefore parent (Just frag) (Just node)
   return first
 
-updateList :: (Renderer t, Ord k) => Dom.Node -> Map k (Maybe Dom.DocumentFragment) -> Map k Dom.Node -> Render t (Map k Dom.Node)
+buildList :: MonadIO m => Dom.Node -> Map k Dom.DocumentFragment -> m (Map k Dom.Node)
+buildList end frags0 = liftIO $ Map.mapMaybe id <$> traverse (insertFragmentBefore end) frags0
+
+updateList :: (MonadIO m, Ord k) => Dom.Node -> Map k (Maybe Dom.DocumentFragment) -> Map k Dom.Node -> m (Map k Dom.Node)
 updateList end frags markers' = liftIO $ ifoldrM insertRemove markers' frags where
   insertRemove k mayFrag markers = do
     traverse_ removeStart range
@@ -355,6 +355,10 @@ buildText str = withParent $ \parent doc -> liftIO $ do
 
 updateText :: MonadIO m => Dom.Text -> DomString -> m ()
 updateText text =  liftIO . void . Dom.setData text . Just
+
+
+
+
 
 
 buildElement :: Renderer t => DomString -> DomString -> DynMap t DomString DomString -> Builder t a -> Builder t (Dom.Element, a)

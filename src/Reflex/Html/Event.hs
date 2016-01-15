@@ -7,9 +7,13 @@ import qualified GHCJS.DOM.EventM as Dom
 import qualified GHCJS.DOM.UIEvent as Dom
 import qualified GHCJS.DOM.Types as Dom
 
+
+import qualified GHCJS.DOM.HTMLInputElement as Input
+
 import Data.Bitraversable
 import Data.GADT.Compare.TH
 
+import Reflex.Html.Prelude
 
 data EventTag
    = AbortTag
@@ -59,6 +63,8 @@ data EventTag
    | TouchendTag
    | TouchcancelTag
 
+   | TextInputTag
+
 data EventName :: EventTag -> * where
   Abort          :: EventName 'AbortTag
   Blur           :: EventName 'BlurTag
@@ -106,6 +112,8 @@ data EventName :: EventTag -> * where
   Touchmove      :: EventName 'TouchmoveTag
   Touchend       :: EventName 'TouchendTag
   Touchcancel    :: EventName 'TouchcancelTag
+
+  TextInput      :: EventName 'TextInputTag
 
 type family EventType en where
   EventType 'AbortTag            = Dom.UIEvent
@@ -155,6 +163,8 @@ type family EventType en where
   EventType 'TouchendTag         = Dom.TouchEvent
   EventType 'TouchcancelTag      = Dom.TouchEvent
 
+  EventType 'TextInputTag        = Dom.Event
+
 onEventName :: (Dom.IsElement e) => EventName en -> e -> Dom.EventM e (EventType en) () -> IO (IO ())
 onEventName en e = case en of
     Abort       -> Dom.on e Dom.abort
@@ -203,6 +213,8 @@ onEventName en e = case en of
     Touchmove   -> Dom.on e Dom.touchMove
     Touchend    -> Dom.on e Dom.touchEnd
     Touchcancel -> Dom.on e Dom.touchCancel
+
+    TextInput   -> Dom.on e Dom.input
 
 newtype EventResult en = EventResult { unEventResult :: EventResultType en }
 
@@ -254,6 +266,7 @@ type family EventResultType (en :: EventTag) :: * where
   EventResultType 'MousewheelTag  = ()
   EventResultType 'WheelTag       = ()
 
+  EventResultType 'TextInputTag   = DomString
 
 getKeyEvent :: Dom.EventM e Dom.KeyboardEvent Int
 getKeyEvent = do
@@ -268,55 +281,57 @@ getKeyEvent = do
          else Dom.getKeyCode e
 
 
-defaultDomEventHandler :: Dom.IsElement e => e -> EventName en -> Dom.EventM e (EventType en) (Maybe (EventResult en))
-defaultDomEventHandler e evt = Just . EventResult <$> case evt of
-  Click       -> return ()
-  Dblclick    -> return ()
-  Keypress    -> getKeyEvent
-  Scroll      -> Dom.getScrollTop e
-  Keydown     -> getKeyEvent
-  Keyup       -> getKeyEvent
-  Mousemove   -> Dom.mouseXY
-  Mouseup     -> Dom.mouseXY
-  Mousedown   -> Dom.mouseXY
-  Mouseenter  -> return ()
-  Mouseleave  -> return ()
-  Focus       -> return ()
-  Blur        -> return ()
-  Change      -> return ()
-  Drag        -> return ()
-  Dragend     -> return ()
-  Dragenter   -> return ()
-  Dragleave   -> return ()
-  Dragover    -> return ()
-  Dragstart   -> return ()
-  Drop        -> return ()
-  Abort       -> return ()
-  Contextmenu -> return ()
-  Error       -> return ()
-  Input       -> return ()
-  Invalid     -> return ()
-  Load        -> return ()
-  Mouseout    -> return ()
-  Mouseover   -> return ()
-  Select      -> return ()
-  Submit      -> return ()
-  Beforecut   -> return ()
-  Cut         -> return ()
-  Beforecopy  -> return ()
-  Copy        -> return ()
-  Beforepaste -> return ()
-  Paste       -> return ()
-  Reset       -> return ()
-  Search      -> return ()
-  Selectstart -> return ()
-  Touchstart  -> return ()
-  Touchmove   -> return ()
-  Touchend    -> return ()
-  Touchcancel -> return ()
-  Mousewheel  -> return ()
-  Wheel       -> return ()
 
+defaultDomEventHandler :: Dom.IsElement e => e -> EventName en -> Dom.EventM e (EventType en) (Maybe (EventResult en))
+defaultDomEventHandler e evt = fmap EventResult <$> case evt of
+  Click       -> return $ Just ()
+  Dblclick    -> return $ Just ()
+  Keypress    -> Just <$> getKeyEvent
+  Scroll      -> Just <$> Dom.getScrollTop e
+  Keydown     -> Just <$> getKeyEvent
+  Keyup       -> Just <$> getKeyEvent
+  Mousemove   -> Just <$> Dom.mouseXY
+  Mouseup     -> Just <$> Dom.mouseXY
+  Mousedown   -> Just <$> Dom.mouseXY
+  Mouseenter  -> return $ Just ()
+  Mouseleave  -> return $ Just ()
+  Focus       -> return $ Just ()
+  Blur        -> return $ Just ()
+  Change      -> return $ Just ()
+  Drag        -> return $ Just ()
+  Dragend     -> return $ Just ()
+  Dragenter   -> return $ Just ()
+  Dragleave   -> return $ Just ()
+  Dragover    -> return $ Just ()
+  Dragstart   -> return $ Just ()
+  Drop        -> return $ Just ()
+  Abort       -> return $ Just ()
+  Contextmenu -> return $ Just ()
+  Error       -> return $ Just ()
+  Input       -> return $ Just ()
+  Invalid     -> return $ Just ()
+  Load        -> return $ Just ()
+  Mouseout    -> return $ Just ()
+  Mouseover   -> return $ Just ()
+  Select      -> return $ Just ()
+  Submit      -> return $ Just ()
+  Beforecut   -> return $ Just ()
+  Cut         -> return $ Just ()
+  Beforecopy  -> return $ Just ()
+  Copy        -> return $ Just ()
+  Beforepaste -> return $ Just ()
+  Paste       -> return $ Just ()
+  Reset       -> return $ Just ()
+  Search      -> return $ Just ()
+  Selectstart -> return $ Just ()
+  Touchstart  -> return $ Just ()
+  Touchmove   -> return $ Just ()
+  Touchend    -> return $ Just ()
+  Touchcancel -> return $ Just ()
+  Mousewheel  -> return $ Just ()
+  Wheel       -> return $ Just ()
+
+  TextInput   -> liftIO $ Input.getValue (Input.castToHTMLInputElement e)
 
 deriveGEq ''EventName
 deriveGCompare ''EventName
