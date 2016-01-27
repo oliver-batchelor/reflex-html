@@ -1,4 +1,4 @@
-{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DefaultSignatures, UndecidableInstances #-}
 
 module Reflex.Html.Html  where
 
@@ -26,31 +26,20 @@ import Reflex.Html.Prelude
 
 type Build t = Traversal (Builder t)
 
-newtype HtmlT t m a = Html
-  { unHtml :: RSST
+type HtmlM t a = RSST
       (EventSelector t Tag)
       (Build t)
       S.Supply
-        m a
-  }
-    deriving (Functor, Applicative, Monad, MonadFix, MonadSample t, MonadHold t,
-             MonadTrans, MonadReader (EventSelector t Tag))
+        (ReflexM t) a
 
+newtype Html t a = Html { unHtml :: HtmlM t a }
 
-type Html t a = HtmlT t (ReflexM t) a
-
-class (Renderer t, MonadSwitch t m) => MonadWidget t m where
-  build_ :: Builder t ()  -> m ()
-  build  :: Builder t a   -> m (Event t a)
-  runChild  :: m a        -> m (a, Builder t ())
-
-  -- Default instances for MonadTrans transformers
-  default build_ :: (MonadTrans u, MonadSwitch t (u m)) => Builder t () -> u m ()
-  build_ = lift . build_
-
-  default build :: (MonadTrans u, MonadSwitch t (u m)) => Builder t a -> u m (Event t a)
-  build = lift . build
-
+deriving instance Renderer t => Functor (Html t)
+deriving instance Renderer t => Applicative (Html t)
+deriving instance Renderer t => Monad (Html t)
+deriving instance Renderer t => MonadFix (Html t)
+deriving instance Renderer t => MonadSample t (Html t)
+deriving instance Renderer t => MonadHold t (Html t)
 
 instance Reflex t => Default (Event t a) where
   def = never
@@ -68,27 +57,31 @@ instance Reflex t => Switching t (EventSelector t k) where
     return $ EventSelector $ \k -> switch (flip select k <$> b)
 
 
-instance (Renderer t, MonadSwitch t m) => MonadWidget t (HtmlT t m) where
-  build_  = Html .  tell . Traversal . void
+build_ ::  Renderer t => Builder t () -> Html t ()
+build_  = Html .  tell . Traversal . void
 
-  build r = do
-    tag <- freshTag
-    Html . tell . Traversal . return' $ tag
-    asks (flip select tag)
+build  ::  Renderer t => Builder t a -> Html t (Event t a)
+build r = Html $ do
+  tag <- freshTag
+  tell . Traversal . return' $ tag
+  asks (flip select tag)
       where return' tag = r >>= Build . lift . return_ tag
 
-  runChild (Html m) = Html $ do
-    (a, Traversal r) <- collectRSST m
-    return (a, r)
+runChild  :: Renderer t => Html t a -> Html t (a, Builder t ())
+runChild (Html m) = Html $ do
+  (a, Traversal r) <- collectRSST m
+  return (a, r)
 
 
+liftHtml :: ReflexM t a -> Html t a
+liftHtml = Html . lift
 
-instance (Renderer t, MonadSwitch t m) => MonadSwitch t (HtmlT t m) where
+instance Renderer t => MonadSwitch t (Html t) where
   switchM (Updated initial e) = do
     s <- getSplit
-    env <- ask
+    env <- Html ask
     rec
-      (a, us, b) <- lift (split3 <$>
+      (a, us, b) <- liftHtml (split3 <$>
         switchM (Updated (run env s initial) $ attachWith (run env) r e))
       r <- hold' us
 
@@ -99,12 +92,12 @@ instance (Renderer t, MonadSwitch t m) => MonadSwitch t (HtmlT t m) where
       run env s (Html m) = runRSST m env s
 
   switchMapM (UpdatedMap initial e) = do
-    env <- ask
+    env <- Html ask
     (initial', s) <- runSupplyMap initial env <$> getSplit
 
     rec
       let (um, us) = split $ attachWith (runSupplyMap' env) r e
-      a <- lift (switchMapM (UpdatedMap initial' um))
+      a <- liftHtml (switchMapM (UpdatedMap initial' um))
       r <- hold s us
 
     build_ =<< switchConcat' (getTraversal . snd <$> a)
@@ -112,26 +105,26 @@ instance (Renderer t, MonadSwitch t m) => MonadSwitch t (HtmlT t m) where
 
 
 
-getSplit :: Monad m => HtmlT t m S.Supply
+getSplit :: Html t S.Supply
 getSplit = Html $ state S.splitSupply
 
-freshTag :: Monad m => HtmlT t m (Tag a)
-freshTag = Html $ Tag <$> state S.freshId
+freshTag :: HtmlM t (Tag a)
+freshTag =  Tag <$> state S.freshId
 
-eventTag :: (Reflex t, Monad m) => HtmlT t m (Event t a, Tag a)
-eventTag = do
+eventTag :: Reflex t => Html t (Event t a, Tag a)
+eventTag = Html $ do
   tag <- freshTag
   e <- asks (flip select tag)
   return (e, tag)
 
 
-switchBuild :: (Default a, Switching t a, MonadWidget t m) => Builder t a -> m a
+switchBuild :: (Default a, Switching t a, Renderer t) => Builder t a -> Html t a
 switchBuild = build >=> delayed
 
 delayed :: (MonadReflex t m, Default a, Switching t a) => Event t a -> m a
 delayed = switching def
 
-holdBuild :: MonadWidget t m => Builder t a -> m (Behavior t (Maybe a))
+holdBuild :: Renderer t => Builder t a -> Html t (Behavior t (Maybe a))
 holdBuild r = hold Nothing =<< fmap Just <$> build r
 
 
@@ -152,20 +145,19 @@ htmlBody html = do
   buildBody ref builder
 
 
-
 -- Helper functions to support the MonadSwitch instance
 split3 :: Functor f => f (a, b, c) -> (f a, f b, f c)
 split3 f = (view _1 <$> f, view _2 <$> f, view _3 <$> f)
 
-runSupplyMap :: (Ord k, Monad m, Renderer t) =>  Map k (HtmlT t m a) ->
-      EventSelector t Tag -> S.Supply -> (Map k (m (a, Build t)), S.Supply)
+runSupplyMap :: (Ord k, Renderer t) =>  Map k (Html t a) ->
+      EventSelector t Tag -> S.Supply -> (Map k (ReflexM t (a, Build t)), S.Supply)
 runSupplyMap m env = runState (traverse (runSplit env) m)
 
-runSupplyMap' :: (Ord k, Monad m, Renderer t) => EventSelector t Tag ->  S.Supply
-       ->  Map k (Maybe (HtmlT t m a))
-       -> (Map k (Maybe (m (a, Build t))), S.Supply)
+runSupplyMap' :: (Ord k, Renderer t) => EventSelector t Tag ->  S.Supply
+       ->  Map k (Maybe (Html t a))
+       -> (Map k (Maybe (ReflexM t (a, Build t))), S.Supply)
 runSupplyMap' env s m =  runState (traverse (traverse (runSplit env)) m) s
 
-runSplit :: (Monad m, Renderer t) => EventSelector t Tag -> HtmlT t m a -> State S.Supply (m (a, Build t))
+runSplit :: Renderer t => EventSelector t Tag -> Html t a -> State S.Supply (ReflexM t (a, Build t))
 runSplit env (Html m) = evalRSST m env <$> state S.splitSupply
 

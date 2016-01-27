@@ -9,6 +9,7 @@ import Reflex.Html.Html
 import Reflex.Html.Input
 import Reflex.Html.Element
 import Reflex.Html.Elements.Html
+import Reflex.Html.Render
 
 import Reflex.Html.Prelude
 
@@ -18,7 +19,7 @@ import Data.String
 
 import Prelude hiding (div)
 
-myForm :: MonadWidget t m => [DomString] -> m (Dynamic t [DomString])
+myForm :: Renderer t => [DomString] -> Html t (Dynamic t [DomString])
 myForm questions = workflow start where
   start = Workflow $ form' questions []
 
@@ -31,22 +32,23 @@ myForm questions = workflow start where
     return (ans, Workflow . form' qs . (: ans)  <$> answer)
 
 
-inputOk :: MonadWidget t m => DomString -> m (Event t DomString)
+inputOk :: Renderer t => DomString -> Html t (Event t DomString)
 inputOk q = do
-  text q >> br []
+  text q
   t <- textInput [] $ def
   b <-  button_  [] $ text "Ok!"
-  dynText (value t)
+  dynText (inputValue t)
+  br []
 
-  return $ tag (current $ value t) (clicked b)
+  return $ tag (current $ inputValue t) (clicked b)
 
-inputOk' :: MonadWidget t m => DomString -> m ((), Event t ())
+inputOk' :: Renderer t => DomString -> Html t ((), Event t ())
 inputOk' = fmap (\e -> ((), void e)) . inputOk
 
 
 main = htmlBody widget
 
-widget :: MonadWidget t m => m ()
+widget :: Renderer t => Html t ()
 widget = div [] $ do
   rec
     h1_ [] $ dynText =<< mapDyn (\x -> "hello world" <> fromString (show x)) c
@@ -54,7 +56,7 @@ widget = div [] $ do
     h <- button_ [] $ text "hidden"
     new <- button_ [] $ text "add new"
 
-    m <- holdMapDyn =<< collection (inputOk' <$> ["1", "2"]) ([inputOk' "new item"] <$ clicked new)
+    m <- p [] $ holdMapDyn =<< collection (inputOk' <$> ["1", "2"]) ([inputOk' "new item"] <$ clicked new)
     p [] $ dynText =<< mapDyn (fromString . show) m
 
 
@@ -63,16 +65,14 @@ widget = div [] $ do
     c <- count (clicked b)
     hidden <- toggle False (clicked h)
 
-    div [ hidden_ :~ hidden ] $ do
+    div [ hidden_ ~: hidden ] $ do
       f <- button_ [] $ text "focus!"
-      t <- textInput [] $ def
+      t <- textInput [SetFocus -: True <$ clicked f] $ def
          & setValue .~ (fromString . show <$> updated c)
-         & setFocus .~ (True <$ clicked f)
-
-      dynText (value t)
+      dynText (inputValue t)
 
       p [] $ do
         text "changed: "
-        dynText =<< holdDyn "" (changed t)
+        dynText =<< holdDyn "" (inputChanged t)
   return ()
 

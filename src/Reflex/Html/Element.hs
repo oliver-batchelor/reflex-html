@@ -3,20 +3,20 @@ module Reflex.Html.Element where
 
 import qualified GHCJS.DOM.Types as Dom
 import qualified GHCJS.DOM.Element as Dom
+import qualified GHCJS.DOM.Document as Doc
+import qualified GHCJS.DOM.Node as Dom
+
+import qualified GHCJS.DOM.HTMLInputElement as Input
 
 import Reflex.Html.Html
 import Reflex.Html.Render
 import Reflex.Html.Event
 
 import qualified Data.Map as Map
-import Data.Dependent.Map (DMap, DSum (..))
-import qualified Data.Dependent.Map as DMap
-import Data.GADT.Compare.TH
 
-import Control.Lens hiding (Setter)
+import Control.Lens
 import Data.Functor.Misc
 import Data.Functor.Contravariant
-
 
 import Reflex.Html.Prelude
 import qualified Reflex.Html.DomString as S
@@ -32,79 +32,156 @@ instance Reflex t => DomEvents t (Element t) where
 domEvent_ :: Reflex t => EventName en -> Events t -> Event t (EventResultType en)
 domEvent_ en events = unEventResult <$> select events (WrapArg en)
 
-
 clicked :: Reflex t => Element t -> Event t ()
 clicked  = domEvent Click
 
+inputText :: Reflex t => Element t -> Event t DomString
+inputText = domEvent TextInput
 
-fmapDyn :: Reflex t => (a -> b) -> Dynamic t a -> Dynamic t b
-fmapDyn f d = unsafeDynamic (f <$> current d) (f <$> updated d)
+buildElement_ :: Renderer t => DomString -> DomString -> Builder t Dom.Element
+buildElement_ ns tag = withParent $ \parent doc -> do
+  Just e <- liftIO $ Doc.createElementNS doc (Just ns) (Just tag)
+  liftIO $ Dom.appendChild parent $ Just e
+  return e
 
-data Setter t r = forall a. (:=) (Property r a) a
-                | forall a. (:~) (Property r a) (Dynamic t a)
+
+buildElement :: Renderer t => DomString -> DomString -> Builder t () -> Builder t Dom.Element
+buildElement ns tag (Build child) = do
+  dom <- buildElement_ ns tag
+  Build $ local (reParent (Dom.toNode dom)) child
+  return dom
+
+  where
+    reParent dom e = e { envParent = dom }
 
 
-type Attr a = Property (Maybe DomString) a
 
-data Property r a = Property
-  { propConvert :: a -> r
-  , propTarget  :: Target r
+
+
+data Value t a = StaticV a | EventV (Event t a) | DynV   (Dynamic t a)
+
+mapValue :: MonadReflex t m => (a -> b) -> Value t a -> m (Value t b)
+mapValue f (StaticV a)  = return $ StaticV (f a)
+mapValue f (EventV e)   = return $ EventV (f <$> e)
+mapValue f (DynV d)     = DynV <$> mapDyn f d
+
+
+data Property t where
+  Property :: Target a -> Value t a -> Property t
+
+data Target a where
+  Attribute     :: Attribute a -> Target a
+  SetFocus      :: Target Bool
+  SetTextInput  :: Target DomString
+
+class IsTarget target a | target -> a where
+  toTarget :: target -> Target a
+
+instance IsTarget (Attribute a) a where
+  toTarget = Attribute
+
+instance IsTarget (Target a) a where
+  toTarget = id
+
+infixr 0 =:, -:, ~:
+
+(~:) :: IsTarget target a => target -> Dynamic t a -> Property t
+(~:) t = Property (toTarget t) . DynV
+
+(=:) :: IsTarget target a => target -> a -> Property t
+(=:) t = Property (toTarget t) . StaticV
+
+(-:) :: IsTarget target a => target -> Event t a -> Property t
+(-:) t = Property (toTarget t) . EventV
+
+buildProperty :: Renderer t =>  Property t -> Builder t Dom.Element -> Html t (Builder t Dom.Element)
+buildProperty (Property target value) = buildProperty_ target value
+
+setAttribute :: DomString -> Dom.Element -> Maybe DomString -> IO ()
+setAttribute name elem (Just v) = Dom.setAttribute elem name v
+setAttribute name elem Nothing  = Dom.removeAttribute elem name
+
+buildProperty_ :: Renderer t =>  Target a -> Value t a -> Builder t Dom.Element -> Html t (Builder t Dom.Element)
+buildProperty_ (Attribute attr) = \value build -> do
+  str <- mapValue (attrString attr) value
+  setter (setAttribute (attrName attr)) str build
+
+buildProperty_ SetFocus = setter $ \elem b -> case b of
+  True  -> Dom.focus elem
+  False -> Dom.blur elem
+
+buildProperty_ SetTextInput = setter $ \elem str ->
+  Input.setValue (Dom.castToHTMLInputElement elem) (Just str)
+
+setter :: Renderer t => (Dom.Element -> a -> IO ()) -> Value t a -> Builder t Dom.Element -> Html t (Builder t Dom.Element)
+setter f (StaticV a)  = setStatic f a
+setter f (EventV  e)  = setEvent f e
+setter f (DynV d)     = setDyn f d
+
+setEvent :: Renderer t => (Dom.Element -> a -> IO ()) -> Event t a -> Builder t Dom.Element -> Html t (Builder t Dom.Element)
+setEvent f e build = do
+  initial <- hold Nothing (Just <$> e)
+  return $ build >>= \elem -> do
+    sample initial >>= traverse (liftIO . f elem)
+    elem <$ render e (liftIO . f elem)
+
+setStatic :: Renderer t => (Dom.Element -> a -> IO ()) -> a -> Builder t Dom.Element -> Html t (Builder t Dom.Element)
+setStatic f a build = pure $ build >>= \elem -> elem <$ liftIO (f elem a)
+
+setDyn :: Renderer t => (Dom.Element -> a -> IO ()) -> Dynamic t a -> Builder t Dom.Element -> Html t (Builder t Dom.Element)
+setDyn  f d build = do
+  return $ build >>= \elem -> do
+    sample (current d) >>= liftIO . f elem
+    elem <$ render (updated d) (liftIO . f elem)
+
+
+data Attribute a = MkAttr
+  { attrString :: (a -> Maybe DomString)
+  , attrName   :: DomString
   }
 
+instance Contravariant Attribute where
+  contramap f (MkAttr toStr name) = MkAttr (toStr . f) name
 
-data Target r where
-  TargetAttr   :: DomString -> Target (Maybe DomString)
-  TargetFocus  :: Target Bool
+option :: Attribute a -> Attribute (Maybe a)
+option (MkAttr toStr name) = MkAttr (>>= toStr) name where
 
-deriving instance Eq (Target r)
-deriving instance Ord (Target r)
+manySep :: DomString -> Attribute a -> Attribute [a]
+manySep sep (MkAttr toStr name) = MkAttr  toStr' name where
+  toStr' xs = case (catMaybes (toStr <$> xs)) of
+      []  -> Nothing
+      strs -> Just $ S.intercalate sep strs
 
-deriveGEq ''Target
-deriveGCompare ''Target
-
-instance Contravariant (Property r) where
-  contramap f (Property conv target) = Property (conv . f) target
-
-option :: Attr a -> Attr (Maybe a)
-option (Property conv target)  = Property (>>= conv) target where
-
-manySep :: DomString -> Attr a -> Attr [a]
-manySep sep  (Property conv target) =  Property conv' target where
-  conv' xs = case (catMaybes (conv <$> xs)) of
-    []  -> Nothing
-    strs -> Just $ S.intercalate sep strs
-
-commaSep :: Attr a -> Attr [a]
+commaSep :: Attribute a -> Attribute [a]
 commaSep = manySep ","
 
-spaceSep :: Attr a -> Attr [a]
+spaceSep :: Attribute a -> Attribute [a]
 spaceSep = manySep " "
 
-showA :: Show a => DomString -> Attr a
+showA :: Show a => DomString -> Attribute a
 showA = contramap domShow . strA
 
-strA :: DomString -> Attr DomString
-strA name = Property Just (TargetAttr name)
+strA :: DomString -> Attribute DomString
+strA name = MkAttr Just name
 
-commaListA :: DomString -> Attr [DomString]
+commaListA :: DomString -> Attribute [DomString]
 commaListA = commaSep . strA
 
-spaceListA :: DomString -> Attr [DomString]
+spaceListA :: DomString -> Attribute [DomString]
 spaceListA = spaceSep . strA
 
-boolA :: DomString -> Attr Bool
-boolA = Property (\b -> if b then Just "" else Nothing) . TargetAttr
+boolA :: DomString -> Attribute Bool
+boolA = MkAttr (\b -> if b then Just "" else Nothing)
 
-intA :: DomString -> Attr Int
+intA :: DomString -> Attribute Int
 intA = showA
 
-floatA :: DomString -> Attr Float
+floatA :: DomString -> Attribute Float
 floatA = showA
 
-boolA' :: DomString -> DomString -> DomString -> Attr Bool
+boolA' :: DomString -> DomString -> DomString -> Attribute Bool
 boolA' t f = contramap fromBool . strA
   where fromBool b = if b then t else f
-
 
 
 data ElementType = ElementType
@@ -112,54 +189,34 @@ data ElementType = ElementType
   , elemTag   :: DomString
   }
 
-sampleDMap :: MonadSample t m => DMap (WrapArg (Dynamic t) Target) -> m (DMap Target)
-sampleDMap m = DMap.fromDistinctAscList <$> traverse sampleDSum (DMap.toAscList m)
 
-sampleDSum :: MonadSample t m => DSum (WrapArg (Dynamic t) k) -> m (DSum k)
-sampleDSum (WrapArg k :=> d) = (k :=>) <$> sample (current d)
+text :: Renderer t => DomString -> Html t ()
+text str = build_ $ void $ buildText str
 
-sampleAttributes :: MonadSample t m => DMap Target -> DMap (WrapArg (Dynamic t) Target) -> m (DMap Target)
-sampleAttributes static dyn = DMap.union static <$> sampleDMap dyn
+dynText :: Renderer t => Dynamic t DomString -> Html t ()
+dynText d = build_ $ do
+  text <- sample (current d) >>= buildText
+  void $ render (updated d) $ updateText text
 
+el_ :: Renderer t => ElementType -> [Property t] -> Html t () -> Html t (Element t)
+el_ tag attrs = fmap fst . el' tag attrs
 
-holdAttributes :: MonadReflex t m => [Setter t] -> m (DMap Target, DMap (WrapArg (Dynamic t) Target))
-holdAttributes attrs = do
-  attrMap <- Map.fromList <$> traverse toString attrs
-  return (pull $ sampleAttributes attrMap,
-         mergeMap $ Map.mapMaybe (fmap updated . fromRight) attrMap)
+elemBuilder :: Renderer t => ElementType -> [Property t] -> Html t a -> Html t (a, Builder t Dom.Element)
+elemBuilder tag properties child = do
+  (a, r) <- runChild child
+  buildElem <- foldrM ($) (buildElement (elemNs tag) (elemTag tag) r) (buildProperty <$> properties)
+  return (a, buildElem)
 
-  where
-    toString (Attr f k := a) = pure (k, Left (f a))
-    toString (Attr f k :~ d) = (k,) . Right <$> mapDyn f d
-
-    fromRight (Right a) = Just a
-    fromRight _         = Nothing
-
-
--- text :: MonadWidget t m => DomString -> m ()
--- text str = build_ $ void $ buildText str
-
--- dynText :: MonadWidget t m => Dynamic t DomString -> m ()
--- dynText d = build_ $ do
---   text <- sample (current d) >>= buildText
---   void $ render (updated d) $ updateText text
+el :: Renderer t => ElementType -> [Property t] -> Html t a -> Html t a
+el tag properties child = do
+  (a, buildElem) <- elemBuilder tag properties child
+  build_ $ void $ buildElem
+  return a
 
 
--- el_ :: MonadWidget t m => ElementType -> [Attribute t] -> m () -> m (Element t)
--- el_ e attrs = fmap fst . el' e attrs
-
--- el :: MonadWidget t m => ElementType -> [Attribute t] -> m a -> m a
--- el e attrs child = do
---   (a, r) <- runChild child
---   dynAttrs <- holdAttributes attrs
---   build_ $ void $ buildElement (elemNs e) (elemTag e) dynAttrs r
---   return a
-
--- el' :: MonadWidget t m => ElementType -> [Attribute t] -> m a -> m (Element t, a)
--- el' e attrs child = do
---   (a, r) <- runChild child
---   dynAttrs <- holdAttributes attrs
---   events <- switchBuild $
---       buildElement (elemNs e) (elemTag e) dynAttrs r >>= bindEvents . fst
---   return (Element events, a)
+el' :: Renderer t => ElementType -> [Property t] -> Html t a -> Html t (Element t, a)
+el' tag properties child = do
+  (a, buildElem) <- elemBuilder tag properties child
+  events <- switchBuild $ buildElem >>= bindEvents
+  return (Element events, a)
 

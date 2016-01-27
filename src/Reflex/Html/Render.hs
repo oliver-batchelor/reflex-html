@@ -101,7 +101,7 @@ instance MonadReflexCreateTrigger t m => MonadReflexCreateTrigger t (RSST r w s 
   newEventWithTrigger = lift . newEventWithTrigger
   newFanEventWithTrigger f = lift $ newFanEventWithTrigger f
 
-type DynMap t k a = (Behavior t (Map k a), Event t (Map k (Maybe a)))
+--type DynMap t k a = (Behavior t (Map k a), Event t (Map k (Maybe a)))
 
 type Events t = EventSelector t (WrapArg EventResult EventName)
 type EventsHandler f e en  = (forall en. EventName en -> Dom.EventM  e (EventType en)  (Maybe (f en)))
@@ -327,25 +327,8 @@ inFragment env b = do
   return (frag, req)
 
 
-
-buildElement_ :: Renderer t => DomString -> DomString -> DynMap t DomString DomString -> Builder t Dom.Element
-buildElement_ ns tag (currentA, updatedA) = withParent $ \parent doc -> do
-  Just e <- liftIO $ Doc.createElementNS doc (Just ns) (Just tag)
-  sample currentA >>= imapM_ (Dom.setAttribute e)
-  foldRender (flip Map.union) updatedA $
-    liftIO . imapM_ (addRemove e)
-
-  liftIO $ Dom.appendChild parent $ Just e
-  return e
-
-addRemove :: Dom.Element -> DomString -> Maybe DomString -> IO ()
-addRemove e name (Just v) = Dom.setAttribute e name v
-addRemove e name Nothing  = Dom.removeAttribute e name
-
 marker :: Renderer t => Builder t Dom.Node
 marker = Dom.toNode <$> buildText ""
-
-
 
 buildText :: Renderer t => DomString -> Builder t Dom.Text
 buildText str = withParent $ \parent doc -> liftIO $ do
@@ -357,18 +340,6 @@ updateText :: MonadIO m => Dom.Text -> DomString -> m ()
 updateText text =  liftIO . void . Dom.setData text . Just
 
 
-
-
-
-
-buildElement :: Renderer t => DomString -> DomString -> DynMap t DomString DomString -> Builder t a -> Builder t (Dom.Element, a)
-buildElement ns tag attrs (Build child) = do
-  dom <- buildElement_ ns tag attrs
-  a <- Build $ local (reParent (Dom.toNode dom)) child
-  return (dom, a)
-
-  where
-    reParent dom e = e { envParent = dom }
 
 -- Event Trigger creation from input events
 wrapDomEvent :: (Renderer t, Dom.IsElement e, Dom.EventClass event) => e ->  Dom.EventName e event -> Dom.EventM e event a -> Builder t (Event t a)

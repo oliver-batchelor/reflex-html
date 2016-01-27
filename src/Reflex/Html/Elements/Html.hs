@@ -3,6 +3,7 @@ module Reflex.Html.Elements.Html where
 import Reflex.Html.Html
 import Reflex.Html.Element
 import Reflex.Html.DomString
+import Reflex.Html.Render
 
 import Reflex.Html.Prelude
 
@@ -12,9 +13,9 @@ html = ElementType htmlNs
 htmlNs :: DomString
 htmlNs = "http://www.w3.org/1999/xhtml"
 
-type MakeEl   = forall t m a. MonadWidget t m => [Attribute t] -> m a  -> m a
-type MakeEl_  = forall t m a. MonadWidget t m => [Attribute t] -> m () -> m (Element t)
-type MakeEl'  = forall t m a. MonadWidget t m => [Attribute t] -> m a  -> m (Element t, a)
+type MakeEl   = forall t a. Renderer t => [Property t] -> Html t a  -> Html t a
+type MakeEl_  = forall t a. Renderer t => [Property t] -> Html t () -> Html t (Element t)
+type MakeEl'  = forall t a. Renderer t => [Property t] -> Html t a  -> Html t (Element t, a)
 
 
 html_head       = html "head"       :: ElementType
@@ -446,113 +447,113 @@ command    = el html_command        :: MakeEl
 menu       = el html_menu           :: MakeEl
 
 
-br :: forall t m a. MonadWidget t m => [Attribute t] -> m (Element t)
+br ::  Renderer t => [Property t] -> Html t (Element t)
 br attrs = el_ html_br attrs (return ())
 
-hr :: forall t m a. MonadWidget t m => [Attribute t] -> m (Element t)
+hr :: Renderer t => [Property t] -> Html t (Element t)
 hr attrs = el_ html_hr attrs (return ())
 
 
-accept_          = commaListA "accept"               :: Attr [DomString]
-accept_charset_  = spaceListA "accept-charset"       :: Attr [DomString]
-accesskey_       = strA "accesskey"                  :: Attr DomString
-align_           = strA "align"                      :: Attr DomString
-action_          = strA "action"                     :: Attr DomString
-alt_             = strA "alt"                        :: Attr DomString
-async_           = boolA "async"                     :: Attr Bool
-autocomplete_    = boolA' "on" "off" "autocomplete"  :: Attr Bool -- False = "off", True = "on"
-autofocus_       = boolA "autofocus"                 :: Attr Bool
-autoplay_        = boolA "autoplay"                  :: Attr Bool
-autosave_        = boolA "autosave"                  :: Attr Bool
-border_          = boolA' "1" "" "border"            :: Attr Bool   -- False = "", True = "1"
-challenge_       = strA "challenge"                  :: Attr DomString
-charset_         = strA "charset"                    :: Attr DomString
-checked_         = boolA "checked"                   :: Attr Bool
-cite_            = strA "cite"                       :: Attr DomString
-class_           = spaceListA "class"                :: Attr [DomString]
-cols_            = intA "cols"                       :: Attr Int
-colspan_         = intA "colspan"                    :: Attr Int
-content_         = strA "content"                    :: Attr DomString
-contextmenu_     = strA "contextmenu"                :: Attr DomString
-controls_        = boolA "controls"                  :: Attr Bool
-coords_          = commaSep $ intA "coords"          :: Attr [Int]
-data_            = strA "data"                       :: Attr DomString
-datetime_        = strA "datetime"                   :: Attr DomString
-default_         = boolA "default"                   :: Attr Bool
-defer_           = boolA "defer"                     :: Attr Bool
-dir_             = strA "dir"                        :: Attr DomString
-dirname_         = strA "dirname"                    :: Attr DomString
-disabled_        = boolA "disabled"                  :: Attr Bool
-draggable_       = boolA' "true" "false" "draggable" :: Attr Bool
-dropzone_        = spaceListA "dropzone"             :: Attr [DomString]
-enctype_         = strA "enctype"                    :: Attr DomString
-for_             = strA "for"                        :: Attr DomString
-form_            = strA "form"                       :: Attr DomString
-formaction_      = strA "formaction"                 :: Attr DomString
-formnovalidate_  = boolA "formaction"                :: Attr Bool
-headers_         = spaceListA "headers"              :: Attr [DomString]
-height_          = intA "height"                     :: Attr Int
-hidden_          = boolA "hidden"                    :: Attr Bool
-high_            = floatA "high"                     :: Attr Float
-href_            = strA "href"                       :: Attr DomString
-hreflang_        = strA "hreflang"                   :: Attr DomString
-http_equiv       = strA "http-equiv"                 :: Attr DomString
-icon_            = strA "icon"                       :: Attr DomString
-id_              = strA "id"                         :: Attr DomString
-ismap_           = boolA "ismap"                     :: Attr Bool
-itemprop_        = strA "itemprop"                   :: Attr DomString
-keytype_         = strA "keytype"                    :: Attr DomString
-kind_            = strA "kind"                       :: Attr DomString
-label_           = strA "label"                      :: Attr DomString
-lang_            = strA "lang"                       :: Attr DomString
-list_            = strA "list"                       :: Attr DomString
-loop_            = boolA "loop"                      :: Attr Bool
-low_             = floatA "low"                      :: Attr Float
-manifest_        = strA "manifest"                   :: Attr DomString
-max_             = floatA "max"                      :: Attr Float
-maxlength_       = intA "maxlength"                  :: Attr Int
-media_           = strA "media"                      :: Attr DomString
-method_          = strA "method"                     :: Attr DomString
-min_             = floatA "min"                      :: Attr Float
-multiple_        = boolA "multiple"                  :: Attr Bool
-name_            = strA "name"                       :: Attr DomString
-novalidate_      = boolA "novalidate"                :: Attr Bool
-open_            = boolA "open"                      :: Attr Bool
-optimum_         = floatA "optimum"                  :: Attr Float
-pattern_         = strA "pattern"                    :: Attr DomString
-ping_            = strA "ping"                       :: Attr DomString
-placeholder_     = strA "placeholder"                :: Attr DomString
-poster_          = strA "poster"                     :: Attr DomString
-preload_         = strA "preload"                    :: Attr DomString
-radiogroup_      = strA "radiogroup"                 :: Attr DomString
-readonly_        = boolA "readonly"                  :: Attr Bool
-rel_             = spaceListA "rel"                  :: Attr [DomString]
-required_        = boolA "required"                  :: Attr Bool
-reversed_        = boolA "reversed"                  :: Attr Bool
-rows_            = intA "rows"                       :: Attr Int
-rowspan_         = intA "rowspan"                    :: Attr Int
-sandbox_         = spaceListA "sandbox"              :: Attr [DomString]
-scope_           = strA "scope"                      :: Attr DomString
-spellcheck_      = boolA' "true" "false" "scope"     :: Attr Bool
-scoped_          = boolA "scoped"                    :: Attr Bool
-seamless_        = boolA "seamless"                  :: Attr Bool
-selected_        = boolA "selected"                  :: Attr Bool
-shape_           = strA "shape"                      :: Attr DomString
-size_            = intA "size"                       :: Attr Int
-sizes_           = spaceListA "sizes"                :: Attr [DomString]
-span_            = intA "span"                       :: Attr Int
-src_             = strA "src"                        :: Attr DomString
-srcdoc_          = strA "srcdoc"                     :: Attr DomString
-srclang_         = strA "srclang"                    :: Attr DomString
-start_           = intA "start"                      :: Attr Int
-step_            = floatA "step"                     :: Attr Float
-style_           = strA "style"                      :: Attr DomString
-summary_         = strA "summary"                    :: Attr DomString
-tabindex_        = intA "tabindex"                   :: Attr Int
-target_          = strA "target"                     :: Attr DomString
-title_           = strA "title"                      :: Attr DomString
-type_            = strA "type"                       :: Attr DomString
-usemap_          = strA "usemap"                     :: Attr DomString
-value_           = strA "value"                      :: Attr DomString
-width_           = intA "width"                      :: Attr Int
-wrap_            = strA "wrap"                       :: Attr DomString
+accept_          = commaListA "accept"               :: Attribute [DomString]
+accept_charset_  = spaceListA "accept-charset"       :: Attribute [DomString]
+accesskey_       = strA "accesskey"                  :: Attribute DomString
+align_           = strA "align"                      :: Attribute DomString
+action_          = strA "action"                     :: Attribute DomString
+alt_             = strA "alt"                        :: Attribute DomString
+async_           = boolA "async"                     :: Attribute Bool
+autocomplete_    = boolA' "on" "off" "autocomplete"  :: Attribute Bool -- False = "off", True = "on"
+autofocus_       = boolA "autofocus"                 :: Attribute Bool
+autoplay_        = boolA "autoplay"                  :: Attribute Bool
+autosave_        = boolA "autosave"                  :: Attribute Bool
+border_          = boolA' "1" "" "border"            :: Attribute Bool   -- False = "", True = "1"
+challenge_       = strA "challenge"                  :: Attribute DomString
+charset_         = strA "charset"                    :: Attribute DomString
+checked_         = boolA "checked"                   :: Attribute Bool
+cite_            = strA "cite"                       :: Attribute DomString
+class_           = spaceListA "class"                :: Attribute [DomString]
+cols_            = intA "cols"                       :: Attribute Int
+colspan_         = intA "colspan"                    :: Attribute Int
+content_         = strA "content"                    :: Attribute DomString
+contextmenu_     = strA "contextmenu"                :: Attribute DomString
+controls_        = boolA "controls"                  :: Attribute Bool
+coords_          = commaSep $ intA "coords"          :: Attribute [Int]
+data_            = strA "data"                       :: Attribute DomString
+datetime_        = strA "datetime"                   :: Attribute DomString
+default_         = boolA "default"                   :: Attribute Bool
+defer_           = boolA "defer"                     :: Attribute Bool
+dir_             = strA "dir"                        :: Attribute DomString
+dirname_         = strA "dirname"                    :: Attribute DomString
+disabled_        = boolA "disabled"                  :: Attribute Bool
+draggable_       = boolA' "true" "false" "draggable" :: Attribute Bool
+dropzone_        = spaceListA "dropzone"             :: Attribute [DomString]
+enctype_         = strA "enctype"                    :: Attribute DomString
+for_             = strA "for"                        :: Attribute DomString
+form_            = strA "form"                       :: Attribute DomString
+formaction_      = strA "formaction"                 :: Attribute DomString
+formnovalidate_  = boolA "formaction"                :: Attribute Bool
+headers_         = spaceListA "headers"              :: Attribute [DomString]
+height_          = intA "height"                     :: Attribute Int
+hidden_          = boolA "hidden"                    :: Attribute Bool
+high_            = floatA "high"                     :: Attribute Float
+href_            = strA "href"                       :: Attribute DomString
+hreflang_        = strA "hreflang"                   :: Attribute DomString
+http_equiv       = strA "http-equiv"                 :: Attribute DomString
+icon_            = strA "icon"                       :: Attribute DomString
+id_              = strA "id"                         :: Attribute DomString
+ismap_           = boolA "ismap"                     :: Attribute Bool
+itemprop_        = strA "itemprop"                   :: Attribute DomString
+keytype_         = strA "keytype"                    :: Attribute DomString
+kind_            = strA "kind"                       :: Attribute DomString
+label_           = strA "label"                      :: Attribute DomString
+lang_            = strA "lang"                       :: Attribute DomString
+list_            = strA "list"                       :: Attribute DomString
+loop_            = boolA "loop"                      :: Attribute Bool
+low_             = floatA "low"                      :: Attribute Float
+manifest_        = strA "manifest"                   :: Attribute DomString
+max_             = floatA "max"                      :: Attribute Float
+maxlength_       = intA "maxlength"                  :: Attribute Int
+media_           = strA "media"                      :: Attribute DomString
+method_          = strA "method"                     :: Attribute DomString
+min_             = floatA "min"                      :: Attribute Float
+multiple_        = boolA "multiple"                  :: Attribute Bool
+name_            = strA "name"                       :: Attribute DomString
+novalidate_      = boolA "novalidate"                :: Attribute Bool
+open_            = boolA "open"                      :: Attribute Bool
+optimum_         = floatA "optimum"                  :: Attribute Float
+pattern_         = strA "pattern"                    :: Attribute DomString
+ping_            = strA "ping"                       :: Attribute DomString
+placeholder_     = strA "placeholder"                :: Attribute DomString
+poster_          = strA "poster"                     :: Attribute DomString
+preload_         = strA "preload"                    :: Attribute DomString
+radiogroup_      = strA "radiogroup"                 :: Attribute DomString
+readonly_        = boolA "readonly"                  :: Attribute Bool
+rel_             = spaceListA "rel"                  :: Attribute [DomString]
+required_        = boolA "required"                  :: Attribute Bool
+reversed_        = boolA "reversed"                  :: Attribute Bool
+rows_            = intA "rows"                       :: Attribute Int
+rowspan_         = intA "rowspan"                    :: Attribute Int
+sandbox_         = spaceListA "sandbox"              :: Attribute [DomString]
+scope_           = strA "scope"                      :: Attribute DomString
+spellcheck_      = boolA' "true" "false" "scope"     :: Attribute Bool
+scoped_          = boolA "scoped"                    :: Attribute Bool
+seamless_        = boolA "seamless"                  :: Attribute Bool
+selected_        = boolA "selected"                  :: Attribute Bool
+shape_           = strA "shape"                      :: Attribute DomString
+size_            = intA "size"                       :: Attribute Int
+sizes_           = spaceListA "sizes"                :: Attribute [DomString]
+span_            = intA "span"                       :: Attribute Int
+src_             = strA "src"                        :: Attribute DomString
+srcdoc_          = strA "srcdoc"                     :: Attribute DomString
+srclang_         = strA "srclang"                    :: Attribute DomString
+start_           = intA "start"                      :: Attribute Int
+step_            = floatA "step"                     :: Attribute Float
+style_           = strA "style"                      :: Attribute DomString
+summary_         = strA "summary"                    :: Attribute DomString
+tabindex_        = intA "tabindex"                   :: Attribute Int
+target_          = strA "target"                     :: Attribute DomString
+title_           = strA "title"                      :: Attribute DomString
+type_            = strA "type"                       :: Attribute DomString
+usemap_          = strA "usemap"                     :: Attribute DomString
+value_           = strA "value"                      :: Attribute DomString
+width_           = intA "width"                      :: Attribute Int
+wrap_            = strA "wrap"                       :: Attribute DomString
