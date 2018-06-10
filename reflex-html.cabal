@@ -21,6 +21,7 @@ library
 
                       , Builder.Html, Builder.Html.Attributes, Builder.Html.Elements
                       , Builder.Svg, Builder.Svg.Attributes, Builder.Svg.Elements
+                      , Reflex.Active
 
   build-depends:       base >=4.9 && <4.11
                      , reflex
@@ -30,12 +31,17 @@ library
                      , containers
                      , lens
                      , template-haskell
+                     , dependent-map
+                     , dependent-sum
+                     , dependent-sum-template
+                     , data-default
 
   hs-source-dirs:      .
   default-language:    Haskell2010
+  ghc-options: -ddump-splices
   default-extensions:  TemplateHaskell, FlexibleInstances, FlexibleContexts,
                        GADTs, MultiParamTypeClasses, TypeApplications,
                        ScopedTypeVariables, DataKinds, RankNTypes, OverloadedStrings,
-                       TypeFamilies, GeneralizedNewtypeDeriving, TupleSections,
-                       RecordWildCards, TypeOperators, NoMonomorphismRestriction,
+                       TypeFamilies, GeneralizedNewtypeDeriving, StandaloneDeriving, DeriveFunctor,
+                       TupleSections, RecordWildCards, TypeOperators, NoMonomorphismRestriction,
                        TemplateHaskell, QuasiQuotes, LambdaCase, PolyKinds

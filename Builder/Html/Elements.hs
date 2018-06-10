@@ -29,6 +29,7 @@ $(mkElems Nothing
   --Document metadata
   [ C "link"
   , C "meta"
+  , C "base"
   , E "style"
   , E "title"
 
