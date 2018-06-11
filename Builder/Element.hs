@@ -5,77 +5,71 @@ import Prelude
 import Reflex.Dom hiding (makeElement, PropertyMap)
 
 import qualified Data.Dependent.Map as DM
+import Data.Dependent.Map (DMap, DSum(..))
 
 import qualified Data.Map as M
 import Data.Map (Map)
 import Data.Text (Text)
 
-import Data.Maybe (catMaybes)
-import Control.Lens ((.~), (&))
+import Data.Functor.Identity
+import Data.Maybe (catMaybes, fromMaybe)
+import Control.Lens ((.~), (&), set)
 import Control.Monad (unless)
 
 import Builder.Attribute
 
+
 type ElemType t m = Element EventResult (DomBuilderSpace m) t
 
-type Elem   = forall t m a. (DomBuilder t m, PostBuild t m)  => PropertyMap t -> m a  -> m a
-type Elem_  = forall t m a. (DomBuilder t m, PostBuild t m)  => PropertyMap t -> m () -> m (ElemType t m)
-type Elem'  = forall t m a. (DomBuilder t m, PostBuild t m)  => PropertyMap t -> m a  -> m (ElemType t m, a)
-type Child_  = forall t m a. (DomBuilder t m, PostBuild t m) => PropertyMap t -> m (ElemType t m)
+type Elem attr   = forall t m a. (DomBuilder t m, PostBuild t m, AttributeSet attr)  => PropertyMap attr t -> m a  -> m a
+type Elem_ attr  = forall t m a. (DomBuilder t m, PostBuild t m, AttributeSet attr)  => PropertyMap attr t -> m () -> m (ElemType t m)
+type Elem' attr = forall  t m a. (DomBuilder t m, PostBuild t m, AttributeSet attr)  => PropertyMap attr t -> m a  -> m (ElemType t m, a)
+type Child_ attr  = forall t m a. (DomBuilder t m, PostBuild t m, AttributeSet attr) => PropertyMap attr t -> m (ElemType t m)
 
 
-makeElem ::  Maybe Namespace -> Text -> Elem
+makeElem ::  Maybe Namespace -> Text -> Elem attr
 makeElem ns elemName props child = snd <$> makeElem' ns elemName props child
 {-# INLINE makeElem #-}
 
-makeElem_ ::  Maybe Namespace -> Text -> Elem_
+makeElem_ ::  Maybe Namespace -> Text -> Elem_ attr
 makeElem_ ns elemName props child = fst <$> makeElem' ns elemName props child
 {-# INLINE makeElem_ #-}
 
-makeChild_ ::  Maybe Namespace -> Text -> Child_
+makeChild_ ::  Maybe Namespace -> Text -> Child_ attr
 makeChild_ ns elemName props = fst <$> makeElem' ns elemName props (return ())
 {-# INLINE makeChild_ #-}
 
-makeElem' :: Maybe Namespace -> Text -> Elem'
+makeElem' :: Maybe Namespace -> Text -> Elem' attr
 makeElem' namespace elemName properties child = do
 
   postBuild <- getPostBuild
-  let (initial, updates) = attributeUpdates properties postBuild
+  let updates = attributeUpdates postBuild
       config = def
         & elementConfig_namespace         .~ namespace
         & elementConfig_initialAttributes .~ initial
-        & case updates of
-              [] -> id
-              es -> elementConfig_modifyAttributes  .~ updates
+        & if DM.null dynamics then id else elementConfig_modifyAttributes .~ updates
 
   result <- element elemName config child
-  unless (null updates) $ notReadyUntil postBuild
+  unless (DM.null dynamics) $ notReadyUntil postBuild
   return result
 
-showAttribute :: Attribute a -> (a -> Maybe Text)
+    where
+      (statics, dynamics) = splitAttributes (attributeProps properties)
+      initial = M.fromList (catMaybes (maybeValue <$> DM.toList statics))
 
-attributeUpdates :: Reflex t => PropertyMap t -> (Map AttributeName Text, Event t (Map AttributeName (Maybe Text)))
-attributeUpdates props = M.fromList (DM.toList props)
-
-
-  (static, dynamic) = splitAttributes (attributes props)
-
-
-  -- where
-    -- attrInitial = catMaybes $ ffor properties $ \case
-    --   AttrProp (Attribute f name) (StaticBinding a) -> (name,) <$> f a
-    --   _ -> Nothing
-    --
-    -- attrUpdates postBuild = catMaybes $ ffor properties $ \case
-    --   AttrProp (Attribute f name)  (DynBinding d) ->
-    --     Just (name, f <$> leftmost [updated d, tag (current d) postBuild])
-    --   _ -> Nothing
+      attributeUpdates postBuild = leftmost [updatedAttrs dynamics, pushAlways (const (sampleAttrs dynamics)) postBuild]
 
 
 
+updatedAttrs :: forall t attr. (Reflex t, AttributeSet attr) => DMap attr (Dynamic t) -> Event t (Map AttributeName (Maybe Text))
+updatedAttrs d = M.fromList . fmap toValue . DM.toList <$> merge (DM.map updated d) where
+  toValue (k :=> Identity v) = valueA k v
+
+sampleAttrs :: forall t attr m. (Reflex t, MonadSample t m, AttributeSet attr) => DMap attr (Dynamic t) -> m (Map AttributeName (Maybe Text))
+sampleAttrs d = M.fromList <$> traverse sampleAttr (DM.toList d) where
+  sampleAttr (k :=> v) = valueA k <$> sample (current v)
 
 
-
---
--- makeElem :: DomBuilder t m => Text -> [Property t] -> m (Element er (DomBuilderSpace m) t, a)
--- makeElem
+maybeValue :: AttributeSet attr => DSum attr Identity -> Maybe (AttributeName, Text)
+maybeValue (k :=> Identity v) = (name,) <$> value where
+  (name, value) = valueA k v

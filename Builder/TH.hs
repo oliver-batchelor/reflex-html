@@ -14,23 +14,32 @@ import Language.Haskell.TH.Syntax
 -- mkAttributes ::  Maybe String -> [String] -> Q [Dec]
 data ElementType = E String | C String
 
-mkElems ::  Maybe String -> [ElementType] -> Q [Dec]
-mkElems ns elems = concat <$> traverse gen elems  where
-    gen (E name) = concat <$> traverse (\f -> f ns name) [mkElem', mkElem_, mkElem]
-    gen (C name) = mkChild_ ns name
+mkElems ::  Maybe String -> TypeQ -> [ElementType] -> Q [Dec]
+mkElems ns attrs elems = concat <$> traverse gen elems  where
+    gen (E name) = concat <$> traverse (\f -> f attrs ns name) [mkElem', mkElem_, mkElem]
+    gen (C name) = mkChild_ attrs ns name
 
 helper :: String -> Type -> Exp -> [Dec]
 helper elemName typ f = [ SigD n typ, ValD (VarP n) (NormalB f) [], PragmaD (InlineP n Inline FunLike AllPhases) ]
   where n = mkName elemName
 
-mkElem' :: Maybe String -> String -> Q [Dec]
-mkElem' ns elemName = helper (elemName <> "'") <$> [t| Elem' |] <*> [| makeElem' ns elemName  |]
+mkElem' :: TypeQ -> Maybe String -> String -> Q [Dec]
+mkElem' attrs ns elemName = helper (elemName <> "'")
+    <$> [t| Elem' $attrs |]
+    <*> [| makeElem' ns elemName  |]
 
-mkChild_ :: Maybe String -> String -> Q [Dec]
-mkChild_ ns elemName = helper (elemName <> "_") <$> [t| Child_ |] <*> [| makeChild_ ns elemName  |]
 
-mkElem :: Maybe String -> String -> Q [Dec]
-mkElem ns elemName = helper elemName <$> [t| Elem |] <*> [| makeElem ns elemName  |]
+mkChild_ :: TypeQ -> Maybe String -> String -> Q [Dec]
+mkChild_ attrs ns elemName = helper (elemName <> "_")
+  <$> [t| Child_ $attrs |]
+  <*> [| makeChild_ ns elemName  |]
 
-mkElem_ :: Maybe String -> String -> Q [Dec]
-mkElem_ ns elemName = helper (elemName <> "_") <$> [t| Elem_ |] <*> [| makeElem_ ns elemName  |]
+mkElem :: TypeQ ->  Maybe String -> String -> Q [Dec]
+mkElem attrs ns elemName = helper elemName
+  <$> [t| Elem $attrs |]
+  <*> [| makeElem ns elemName  |]
+
+mkElem_ :: TypeQ ->  Maybe String -> String -> Q [Dec]
+mkElem_ attrs ns elemName = helper (elemName <> "_")
+  <$> [t| Elem_ $attrs |]
+  <*> [| makeElem_ ns elemName  |]

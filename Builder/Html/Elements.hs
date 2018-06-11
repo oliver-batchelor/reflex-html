@@ -7,24 +7,26 @@ import Builder.TH
 
 import Data.Text
 
-elem ::  Text -> Elem
+import Builder.Html.Attributes (HtmlAttribute)
+
+elem ::  Text -> Elem HtmlAttribute
 elem elemName props child = snd <$> makeElem' Nothing elemName props child
 {-# INLINE elem #-}
 
-elem_ ::  Text -> Elem_
+elem_ ::  Text -> Elem_ HtmlAttribute
 elem_ elemName props child = fst <$> makeElem' Nothing elemName props child
 {-# INLINE elem_ #-}
 
-child_ ::  Text -> Child_
+child_ ::  Text -> Child_ HtmlAttribute
 child_ elemName props = fst <$> makeElem' Nothing elemName props (return ())
 {-# INLINE child_ #-}
 
-elem' :: Text -> Elem'
+elem' :: Text -> Elem' HtmlAttribute
 elem' = makeElem' Nothing
 {-# INLINE elem' #-}
 
 
-$(mkElems Nothing
+$(mkElems Nothing [t| HtmlAttribute |]
 
   --Document metadata
   [ C "link"

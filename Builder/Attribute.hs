@@ -20,7 +20,7 @@ import Data.Dependent.Map (DMap, DSum(..))
 import Data.Functor.Identity
 
 import Data.GADT.Compare
-import Data.GADT.Compare.TH
+
 
 import Data.Coerce
 import GHC.Exts (IsList(..))
@@ -32,93 +32,77 @@ instance Show Transform where
   show (Translate x y) = mconcat ["translate (", show x, " ", show y, ")"]
 
 
-data AttrType a where
-  FloatA      :: AttrType Float
-  IntA        :: AttrType Int
-  TextA       :: AttrType Text
-  BoolA       :: AttrType Bool
-  StyleA      :: AttrType (Text, Text)
-  ListA       :: Char -> AttrType a -> AttrType [a]
+class GCompare k => AttributeSet (k :: * -> *) where
+  concatA :: k a -> [a] -> a
+  concatA k []    = error "concatA: empty list"
+  concatA k (a:_) = a
 
-  -- Svg specific
-  TransformA  :: AttrType Transform
-
-deriveGCompare ''AttrType
-deriveGEq ''AttrType
-
-data Attribute a where
-  Attr :: !AttributeName -> AttrType a -> Attribute a
-
-instance GCompare Attribute where
-  gcompare (Attr name t) (Attr name' t') = runGComparing $ do
-     compare' name name'
-     let Refl = case gcompare x y of
-           GEQ -> Refl
-           _   -> error ("conflicting types specified for attribute: " <> show name)
-     return GEQ
-
-deriveGEq ''Attribute
+  appendA :: k a -> (a -> a -> a)
+  valueA  :: k a -> a -> (AttributeName, Maybe Text)
 
 
-data Binding t a where
-  AttrB :: Attribute a -> Binding t (Active t a)
+data Binding attr t a where
+  Attribute :: attr a -> Binding attr t (Active t a)
 
-instance Reflex t => GEq (Binding t) where
-  geq (AttrB a) (AttrB b) = case geq a b of
+instance (Reflex t, GEq attr) => GEq (Binding attr t) where
+  geq (Attribute a) (Attribute b) = case geq a b of
     Just Refl -> Just Refl
     Nothing   -> Nothing
 
-
-instance Reflex t => GCompare (Binding t) where
-  gcompare (AttrB a) (AttrB b) = case gcompare a b of
+instance (Reflex t, GCompare attr) => GCompare (Binding attr t) where
+  gcompare (Attribute a) (Attribute b) = case gcompare a b of
     GEQ -> GEQ; GLT -> GLT; GGT -> GGT
 
+newtype PropertyMap attr t = PropertyMap { unPropertyMap :: DMap (Binding attr t) Identity }
+type AttributeMap attr t = DMap attr (Active t)
 
-newtype PropertyMap t = PropertyMap { unAttr :: DMap (Binding t) Identity }
+attributeProps :: forall t attr. Reflex t =>  PropertyMap attr t -> AttributeMap attr t
+attributeProps (PropertyMap props) = M.fromDistinctAscList (toAttr `fmapMaybe` M.toAscList props) where
 
-type AttributeMap t = DMap Attribute (Active t)
+  toAttr :: DSum (Binding attr t) Identity -> Maybe (DSum attr (Active t))
+  toAttr (Attribute k :=> Identity v) = Just (k :=> v)
 
-attributes :: forall t. Reflex t =>  PropertyMap t -> AttributeMap t
-attributes (PropertyMap props) = M.fromDistinctAscList (toAttr `fmapMaybe` M.toAscList props) where
 
-  toAttr :: DSum (Binding t) Identity -> Maybe (DSum Attribute (Active t))
-  toAttr (AttrB k :=> Identity v) = Just (k :=> v)
-
-splitAttributes ::  Reflex t => AttributeMap t -> (DMap Attribute Identity, DMap Attribute (Dynamic t))
+splitAttributes ::  (Reflex t, GCompare attr) => AttributeMap attr t -> (DMap attr Identity, DMap attr (Dynamic t))
 splitAttributes = M.mapEitherWithKey f where
   f k (Static a) = Left (Identity a)
   f k (Dyn d)    = Right d
 
 
 
-appendBinding :: forall t v. Reflex t
-              => Binding t v -> Identity v -> Identity v -> Identity v
-appendBinding (AttrB k) a b = liftA2 (appendAttr k) a b
+appendBinding :: forall t attr v. (AttributeSet attr, Reflex t)
+              => Binding attr t v -> Identity v -> Identity v -> Identity v
+appendBinding (Attribute k) a b = liftA2 (liftA2 (appendA k)) a b where
 
 
-appendAttr :: forall t a. Reflex t
-              => Attribute a -> Active t a -> Active t a -> Active t a
-appendAttr (Attr _ (ListA _ _)) a b = a `mappend` b
-appendAttr _ a b = b
-
-instance Reflex t => Monoid (PropertyMap t) where
+instance (AttributeSet attr, Reflex t) => Monoid (PropertyMap attr t) where
   mempty = PropertyMap M.empty
   mappend (PropertyMap a) (PropertyMap b) = PropertyMap $ M.unionWithKey appendBinding a b
+  mconcat maps = PropertyMap $ M.mapWithKey f $ M.unionsWithKey (const mappend) lists where
+
+    f k = Identity .  concatBindings k
+    lists = M.map (pure . runIdentity) <$> (coerce maps)
+
+concatBindings :: Reflex t => AttributeSet attr => Binding attr t a -> [a] -> a
+concatBindings (Attribute a) as = concatAttribute a as
+
+concatAttribute :: Reflex t => AttributeSet attr => attr a -> [Active t a] -> Active t a
+concatAttribute k = fmap (concatA k) . distributeListOverActive
 
 infixr 0 =:, ~:
 
-(=:) :: Reflex t => Attribute a -> a -> PropertyMap t
+(=:) :: (GCompare attr, Reflex t) => attr a -> a -> PropertyMap attr t
 (=:) k a =  attr k (Static a)
 
-(~:) :: Reflex t => Attribute a -> Dynamic t a -> PropertyMap t
+(~:) :: (GCompare attr, Reflex t) => attr a -> Dynamic t a -> PropertyMap attr t
 (~:) k d = attr k (Dyn d)
 
-attr :: Reflex t => Attribute a -> Active t a -> PropertyMap t
-attr k v = PropertyMap (M.singleton (AttrB k) (Identity v))
+attr :: (GCompare attr, Reflex t) => attr a -> Active t a -> PropertyMap attr t
+attr k v = PropertyMap (M.singleton (Attribute k) (Identity v))
 
 
-instance Reflex t => IsList (PropertyMap t) where
-  type Item (PropertyMap t) = PropertyMap t
+instance (AttributeSet attr, Reflex t) => IsList (PropertyMap attr t) where
+  type Item (PropertyMap attr t) = PropertyMap attr t
   fromList = mconcat
   toList x = [x]
 
