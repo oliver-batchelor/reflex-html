@@ -11,28 +11,28 @@ import Data.Monoid
 import Data.Functor.Contravariant
 import Data.Text as T
 
+import Reflex.Active 
 
-data Attribute a = Attribute { attrConvert :: a -> Maybe Text, attrName :: !AttributeName }
+data Attribute a 
+  = Attribute { attrConvert :: a -> Maybe Text, attrName :: !AttributeName }
 
 instance Contravariant Attribute where
   contramap f' (Attribute f name) = Attribute (f . f') name
 
-data Binding t a where
-  StaticBinding :: a -> Binding t a
-  DynBinding    :: Dynamic t a -> Binding t a
-
-
 data Property t where
-  AttrProp :: Attribute a -> Binding t a -> Property t
+  AttrProp :: Attribute a -> Active t a -> Property t
 
 
 infixr 0 =:, ~:
 
 (=:) :: Attribute a -> a -> Property t
-(=:) attr a = AttrProp attr (StaticBinding a)
+(=:) k = attr k . Static
 
 (~:) :: Attribute a -> Dynamic t a -> Property t
-(~:) attr d = AttrProp attr (DynBinding d)
+(~:) k = attr k . Dyn
+
+attr :: Attribute a -> Active t a -> Property t
+attr = AttrProp
 
 
 

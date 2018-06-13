@@ -3,6 +3,7 @@ module Builder.Element where
 
 import Prelude
 import Reflex.Dom hiding (makeElement)
+import Reflex.Active
 
 import qualified Data.Map as M
 import Data.Map (Map)
@@ -53,11 +54,11 @@ makeElem' namespace elemName properties child = do
 
   where
     attrInitial = catMaybes $ ffor properties $ \case
-      AttrProp (Attribute f name) (StaticBinding a) -> (name,) <$> f a
+      AttrProp (Attribute f name) (Static a) -> (name,) <$> f a
       _ -> Nothing
 
     attrUpdates postBuild = catMaybes $ ffor properties $ \case
-      AttrProp (Attribute f name)  (DynBinding d) ->
+      AttrProp (Attribute f name)  (Dyn d) ->
         Just (name, f <$> leftmost [updated d, tag (current d) postBuild])
       _ -> Nothing
 
