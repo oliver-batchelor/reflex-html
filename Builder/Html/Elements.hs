@@ -3,7 +3,7 @@ module Builder.Html.Elements where
 import Prelude
 
 import Builder.Element
-import Builder.TH
+import Builder.TH.Element
 
 import Data.Text
 

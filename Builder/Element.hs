@@ -60,7 +60,6 @@ makeElem' namespace elemName properties child = do
       attributeUpdates postBuild = leftmost [updatedAttrs dynamics, pushAlways (const (sampleAttrs dynamics)) postBuild]
 
 
-
 updatedAttrs :: forall t attr. (Reflex t, AttributeSet attr) => DMap attr (Dynamic t) -> Event t (Map AttributeName (Maybe Text))
 updatedAttrs d = M.fromList . fmap toValue . DM.toList <$> merge (DM.map updated d) where
   toValue (k :=> Identity v) = valueA k v

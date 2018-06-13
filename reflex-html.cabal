@@ -17,7 +17,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Builder.Element
                       , Builder.Attribute
-                      , Builder.TH
+                      , Builder.TH.Attribute, Builder.TH.Element
 
                       , Builder.Html, Builder.Html.Attributes, Builder.Html.Elements
                       , Builder.Svg, Builder.Svg.Attributes, Builder.Svg.Elements
