@@ -10,6 +10,8 @@ import Data.Map (Map)
 import Data.Monoid hiding ((<>))
 import Data.Semigroup
 
+import Control.Applicative
+
 -- Active data type for mixing Dynamics and static values
 -- originally from: https://github.com/tomsmalley/semantic-reflex/
 -- by Tom Smalley
@@ -34,8 +36,16 @@ instance (Reflex t, Monoid a) => Monoid (Active t a) where
   Static a `mappend` Dyn b = Dyn (pure a `mappend` b)
   Dyn a `mappend` Static b = Dyn (a `mappend` pure b)
   Dyn a `mappend` Dyn b = Dyn (a `mappend` b)
-  mconcat = fmap mconcat . distributeListOverActive
+  mconcat = fmap mconcat . activeList
 
+
+instance (Reflex t, Num a) => Num (Active t a) where
+  (+) = liftA2 (+)
+  (-) = liftA2 (-)
+  (*) = liftA2 (*)
+  fromInteger = pure . fromInteger
+  abs = fmap abs
+  signum = fmap signum
 
 
 instance IsString a => IsString (Active t a) where
@@ -49,13 +59,13 @@ splitActives = M.mapEither $ \case
   Static a -> Left a
   Dyn d    -> Right d
 
-distributeMapOverActive :: (Reflex t, Ord k) => Map k (Active t a) -> Active t (Map k a)
-distributeMapOverActive as = if null dynamics
+activeMap :: (Reflex t, Ord k) => Map k (Active t a) -> Active t (Map k a)
+activeMap as = if null dynamics
     then Static consts
     else Dyn (mappend consts <$> distributeMapOverDynPure dynamics)
   where
     (consts, dynamics) = splitActives as
 
-distributeListOverActive :: Reflex t => [Active t a] -> Active t [a]
-distributeListOverActive actives = M.elems <$> distributeMapOverActive m
+activeList :: Reflex t => [Active t a] -> Active t [a]
+activeList actives = M.elems <$> activeMap m
     where m = M.fromList (zip [0..] actives)

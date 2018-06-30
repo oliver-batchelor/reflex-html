@@ -26,7 +26,9 @@ cx_         = floatA "cx"                  :: Attribute Float
 cy_         = floatA "cy"                  :: Attribute Float
 
 r_         = floatA "r"                    :: Attribute Float
-classes_     = spaceSep $ strA "class"              :: Attribute [Text]
+
+class_     = strA "class"              :: Attribute Text
+classes_     = spaceSep class_         :: Attribute [Text]
 
 transform_ = spaceSep $ showA "transform"  :: Attribute [Transform]
 

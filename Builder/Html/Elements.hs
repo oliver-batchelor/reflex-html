@@ -31,6 +31,7 @@ $(mkElems Nothing
   , C "meta"
   , E "style"
   , E "title"
+  , C "base"
 
   --Content sectioning
   , E "address"

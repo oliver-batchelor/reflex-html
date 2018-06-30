@@ -35,7 +35,8 @@ makeChild_ ::  Maybe Namespace -> Text -> Child_
 makeChild_ ns elemName props = fst <$> makeElem' ns elemName props (return ())
 {-# INLINE makeChild_ #-}
 
-makeElem' :: Maybe Namespace -> Text -> Elem'
+makeElem' :: forall t m a. (DomBuilder t m, PostBuild t m)
+          => Maybe Namespace -> Text -> [Property t] -> m a  -> m (ElemType t m, a)
 makeElem' namespace elemName properties child = do
 
   postBuild <- getPostBuild
@@ -43,30 +44,23 @@ makeElem' namespace elemName properties child = do
   let updates = attrUpdates postBuild
       config = def
         & elementConfig_namespace         .~ namespace
-        & elementConfig_initialAttributes .~ M.fromList attrInitial
+        & elementConfig_initialAttributes .~ attrInitial
         & case updates of
               [] -> id
-              es -> elementConfig_modifyAttributes  .~ mergeMap (M.fromList updates)
+              es -> elementConfig_modifyAttributes  .~ mconcat updates
 
   result <- element elemName config child
   unless (null updates) $ notReadyUntil postBuild
   return result
 
   where
-    attrInitial = catMaybes $ ffor properties $ \case
-      AttrProp (Attribute f name) (Static a) -> (name,) <$> f a
-      _ -> Nothing
 
+    attrInitial = mconcat $ ffor properties $ \case
+      AttrProp attr (Static a) -> applyAttr' attr a
+      _ -> mempty
+
+    attrUpdates :: Event t () -> [Event t (Map AttributeName (Maybe Text))]
     attrUpdates postBuild = catMaybes $ ffor properties $ \case
-      AttrProp (Attribute f name)  (Dyn d) ->
-        Just (name, f <$> leftmost [updated d, tag (current d) postBuild])
+      AttrProp attr (Dyn d) ->
+        Just (applyAttr attr <$> leftmost [updated d, tag (current d) postBuild])
       _ -> Nothing
-
-
-
-
-
-
---
--- makeElem :: DomBuilder t m => Text -> [Property t] -> m (Element er (DomBuilderSpace m) t, a)
--- makeElem
