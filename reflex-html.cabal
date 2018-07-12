@@ -27,6 +27,7 @@ library
                      , reflex
                      , reflex-dom
                      , text
+                     , linear
                      , contravariant
                      , containers
                      , lens

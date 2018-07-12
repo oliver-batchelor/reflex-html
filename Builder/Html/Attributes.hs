@@ -6,6 +6,7 @@ import Builder.Attribute
 import Builder.TH
 
 import Data.Text (Text)
+import Reflex
 
 accept_          = commaListA "accept"               :: Attribute [Text]
 accept_charset_  = spaceListA "accept-charset"       :: Attribute [Text]
@@ -114,3 +115,9 @@ value_           = strA "value"                      :: Attribute Text
 version_         = strA "version"                    :: Attribute Text
 width_           = intA "width"                      :: Attribute Int
 wrap_            = strA "wrap"                       :: Attribute Text
+
+
+classList :: Reflex t => [Dynamic t Text] -> Property t
+classList classes = classes_ ~: distributeListOverDynPure classes
+
+

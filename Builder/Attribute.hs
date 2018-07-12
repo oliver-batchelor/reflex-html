@@ -48,8 +48,8 @@ _attr = _attrs . traverse
 optional :: Attribute a -> Attribute (Maybe a)
 optional = over _attr (\f a -> a >>= f)
 
-toggle :: Attribute a -> Attribute b -> Attribute (Either a b)
-toggle = chosen
+toggles :: Attribute a -> Attribute b -> Attribute (Either a b)
+toggles = chosen
 
 (<+>) :: Divisible f => f a -> f a -> f a
 (<+>) = divide (\x -> (x, x))
@@ -117,6 +117,10 @@ strA name = attrWith (AttributeName Nothing name) Just
 showA :: Show a => Text -> Attribute a
 showA = contramap (T.pack . show) . strA
 
+
+showingA :: (a -> String) -> Text -> Attribute a
+showingA f = contramap (T.pack . f) . strA
+
 boolA :: Text -> Attribute Bool
 boolA name = attrWith (AttributeName Nothing name) (\b -> if b then Just "" else Nothing)
 
@@ -134,3 +138,5 @@ styleA :: Text -> Attribute [(Text, Text)]
 styleA name = attrWith (AttributeName Nothing name) toStyle where
   toStyle attrs = Just $ T.concat (pair <$> attrs)
   pair (attr, value) = attr <> ":" <> value <> ";"
+  
+  

@@ -104,10 +104,10 @@ $(mkElems (Just "http://www.w3.org/2000/svg")
   , E "missing_glyph"
   , E "mpath"
 
-  , E "path"
+  , C "path"
   , E "pattern"
-  , E "polygon"
-  , E "polyline"
+  , C "polygon"
+  , C "polyline"
 
   , E "radialGradient"
   , C "rect"
