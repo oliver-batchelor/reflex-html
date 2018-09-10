@@ -91,7 +91,7 @@ $(mkElems (Just "http://www.w3.org/2000/svg")
 
   , C "image"
 
-  , E "line"
+  , C "line"
   , E "linearGradient"
 
   , E "marker"
@@ -126,7 +126,7 @@ $(mkElems (Just "http://www.w3.org/2000/svg")
   , E "title"
   , E "tspan"
 
-  , E "use"
+  , C "use"
 
   , E "view"
   ])

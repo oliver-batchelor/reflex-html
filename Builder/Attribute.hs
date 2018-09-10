@@ -7,12 +7,14 @@ import Reflex hiding (Value)
 import Reflex.Dom (AttributeName(..))
 
 import Data.Functor
-import Data.Monoid
+import Data.Monoid hiding ((<>))
+import Data.Semigroup
+
 import Data.Functor.Contravariant
 import Data.Functor.Contravariant.Divisible
 import Data.Text as T
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Data.Map (Map)
 
 import Control.Lens hiding (chosen)
@@ -21,7 +23,7 @@ import Reflex.Active
 import Data.Coerce
 
 newtype Attribute a
-  = Attribute { unAttr :: Map AttributeName (a -> Maybe Text) } deriving Monoid
+  = Attribute { unAttr :: Map AttributeName (a -> Maybe Text) } deriving (Monoid, Semigroup)
 
 instance Contravariant Attribute where
   contramap f' (Attribute m) = Attribute (fmap (. f') m)
@@ -44,19 +46,22 @@ _attrs = coerced
 _attr :: Traversal (Attribute a) (Attribute b) (a -> Maybe Text) (b -> Maybe Text)
 _attr = _attrs . traverse
 
-
+{-# INLINE optional #-}
 optional :: Attribute a -> Attribute (Maybe a)
 optional = over _attr (\f a -> a >>= f)
 
+{-# INLINE toggles #-}
 toggles :: Attribute a -> Attribute b -> Attribute (Either a b)
 toggles = chosen
 
 (<+>) :: Divisible f => f a -> f a -> f a
 (<+>) = divide (\x -> (x, x))
 
+{-# INLINE applyAttr #-}
 applyAttr ::  Attribute a -> a -> Map AttributeName (Maybe Text)
 applyAttr (Attribute m) a = M.map ($ a) m
 
+{-# INLINE applyAttr' #-}
 applyAttr' ::  Attribute a -> a -> Map AttributeName Text
 applyAttr' (Attribute m) a = M.mapMaybe ($ a) m
 
@@ -66,6 +71,7 @@ applyAttr' (Attribute m) a = M.mapMaybe ($ a) m
 data Property t where
   AttrProp :: Attribute a -> Active t a -> Property t
 
+{-# INLINE (=:) #-}
 (=:) :: Reflex t => Attribute a -> a -> Property t
 (=:) k a = k ~: Static a
 
@@ -73,70 +79,84 @@ class Reflex t => ActiveValue v t where
   (~:) :: Attribute a -> v t a -> Property t
 
 instance Reflex t => ActiveValue Active t where
+  {-# INLINE (~:) #-}
   (~:) = AttrProp
 
 instance Reflex t => ActiveValue Dynamic t where
+  {-# INLINE (~:) #-}
   (~:) k = AttrProp k . Dyn
 
 
 infixr 0 =:
 infixr 0 ~:
 
-
+{-# INLINE setNs #-}
 setNs :: Text -> Attribute a -> Attribute a
 setNs ns = over _attrs (M.mapKeys setNs')
   where setNs' (AttributeName _ name) = AttributeName (Just ns) name
 
+{-# INLINE cond #-}
 cond :: a -> Attribute a -> Attribute Bool
 cond a = over _attr (\f b -> if b then f a else Nothing)
 
+{-# INLINE sepBy #-}
 sepBy :: Text -> Attribute a -> Attribute [a]
 sepBy sep = over _attr cat where
   cat f xs = case catMaybes (f <$> xs) of
     []  -> Nothing
     strs -> Just $ T.intercalate sep strs
 
+{-# INLINE commaSep #-}
 commaSep :: Attribute a -> Attribute [a]
 commaSep = sepBy ","
 
+{-# INLINE spaceSep #-}
 spaceSep :: Attribute a -> Attribute [a]
 spaceSep = sepBy " "
 
+{-# INLINE commaListA #-}
 commaListA :: Text -> Attribute [Text]
 commaListA = commaSep . strA
 
+{-# INLINE spaceListA #-}
 spaceListA :: Text -> Attribute [Text]
 spaceListA = spaceSep . strA
 
+{-# INLINE attrWith #-}
 attrWith :: AttributeName -> (a -> Maybe Text) -> Attribute a
 attrWith name = Attribute . M.singleton name
 
+{-# INLINE strA #-}
 strA :: Text -> Attribute Text
 strA name = attrWith (AttributeName Nothing name) Just
 
+{-# INLINE showA #-}
 showA :: Show a => Text -> Attribute a
 showA = contramap (T.pack . show) . strA
 
-
+{-# INLINE showingA #-}
 showingA :: (a -> String) -> Text -> Attribute a
 showingA f = contramap (T.pack . f) . strA
 
+{-# INLINE boolA #-}
 boolA :: Text -> Attribute Bool
 boolA name = attrWith (AttributeName Nothing name) (\b -> if b then Just "" else Nothing)
 
+{-# INLINE intA #-}
 intA :: Text -> Attribute Int
 intA = showA
 
+{-# INLINE floatA #-}
 floatA :: Text -> Attribute Float
 floatA = showA
 
+{-# INLINE ifA #-}
 ifA :: Text -> Text -> Text -> Attribute Bool
 ifA t f = contramap fromBool . strA
   where fromBool b = if b then t else f
 
+{-# INLINE styleA #-}
 styleA :: Text -> Attribute [(Text, Text)]
 styleA name = attrWith (AttributeName Nothing name) toStyle where
   toStyle attrs = Just $ T.concat (pair <$> attrs)
   pair (attr, value) = attr <> ":" <> value <> ";"
-  
-  

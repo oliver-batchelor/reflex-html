@@ -5,7 +5,7 @@ import Prelude
 import Reflex.Dom hiding (makeElement)
 import Reflex.Active
 
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import Data.Map (Map)
 import Data.Text (Text)
 
@@ -16,6 +16,7 @@ import Control.Monad (unless)
 import Builder.Attribute
 
 type ElemType t m = Element EventResult (DomBuilderSpace m) t
+type ElemConfig t m = ElementConfig EventResult t (DomBuilderSpace m)
 
 type Elem   = forall t m a. (DomBuilder t m, PostBuild t m) => [Property t] -> m a  -> m a
 type Elem_  = forall t m a. (DomBuilder t m, PostBuild t m) => [Property t] -> m () -> m (ElemType t m)
@@ -35,10 +36,10 @@ makeChild_ ::  Maybe Namespace -> Text -> Child_
 makeChild_ ns elemName props = fst <$> makeElem' ns elemName props (return ())
 {-# INLINE makeChild_ #-}
 
-makeElem' :: forall t m a. (DomBuilder t m, PostBuild t m)
-          => Maybe Namespace -> Text -> [Property t] -> m a  -> m (ElemType t m, a)
-makeElem' namespace elemName properties child = do
-
+{-# INLINE configure #-}
+configure :: forall t m a. (DomBuilder t m, PostBuild t m)  
+          => Maybe Namespace -> [Property t] -> m (ElemConfig t m)
+configure namespace props = do
   postBuild <- getPostBuild
 
   let updates = attrUpdates postBuild
@@ -49,18 +50,30 @@ makeElem' namespace elemName properties child = do
               [] -> id
               es -> elementConfig_modifyAttributes  .~ mconcat updates
 
-  result <- element elemName config child
+    
   unless (null updates) $ notReadyUntil postBuild
+  return config
+
+    where
+
+      attrInitial = mconcat $ ffor props $ \case
+        AttrProp attr (Static a) -> applyAttr' attr a
+        _ -> mempty
+
+      attrUpdates :: Event t () -> [Event t (Map AttributeName (Maybe Text))]
+      attrUpdates postBuild = catMaybes $ ffor props $ \case
+        AttrProp attr (Dyn d) ->
+          Just (applyAttr attr <$> leftmost [updated d, tag (current d) postBuild])
+        _ -> Nothing
+
+
+{-# INLINE makeElem' #-}
+makeElem' :: forall t m a. (DomBuilder t m, PostBuild t m)
+          => Maybe Namespace -> Text -> [Property t] -> m a  -> m (ElemType t m, a)
+makeElem' namespace elemName props child = do
+
+  config <- configure namespace props
+  result <- element elemName config child
+
   return result
 
-  where
-
-    attrInitial = mconcat $ ffor properties $ \case
-      AttrProp attr (Static a) -> applyAttr' attr a
-      _ -> mempty
-
-    attrUpdates :: Event t () -> [Event t (Map AttributeName (Maybe Text))]
-    attrUpdates postBuild = catMaybes $ ffor properties $ \case
-      AttrProp attr (Dyn d) ->
-        Just (applyAttr attr <$> leftmost [updated d, tag (current d) postBuild])
-      _ -> Nothing

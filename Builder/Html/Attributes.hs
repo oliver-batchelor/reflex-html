@@ -8,6 +8,9 @@ import Builder.TH
 import Data.Text (Text)
 import Reflex
 
+type Style = (Text, Text)
+
+
 accept_          = commaListA "accept"               :: Attribute [Text]
 accept_charset_  = spaceListA "accept-charset"       :: Attribute [Text]
 accesskey_       = strA "accesskey"                  :: Attribute Text
@@ -33,6 +36,8 @@ content_         = strA "content"                    :: Attribute Text
 contextmenu_     = strA "contextmenu"                :: Attribute Text
 controls_        = boolA "controls"                  :: Attribute Bool
 coords_          = commaSep $ intA "coords"          :: Attribute [Int]
+crossorigin_     = strA "crossorigin"                :: Attribute Text
+
 data_            = strA "data"                       :: Attribute Text
 datetime_        = strA "datetime"                   :: Attribute Text
 default_         = boolA "default"                   :: Attribute Bool
@@ -104,7 +109,7 @@ srcdoc_          = strA "srcdoc"                     :: Attribute Text
 srclang_         = strA "srclang"                    :: Attribute Text
 start_           = intA "start"                      :: Attribute Int
 step_            = floatA "step"                     :: Attribute Float
-style_           = styleA "style"                    :: Attribute [(Text, Text)]
+style_           = styleA "style"                    :: Attribute [Style]
 summary_         = strA "summary"                    :: Attribute Text
 tabindex_        = intA "tabindex"                   :: Attribute Int
 target_          = strA "target"                     :: Attribute Text
