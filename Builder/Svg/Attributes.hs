@@ -93,11 +93,24 @@ height_    = floatA "height"               :: Attribute Float
 draggable_       = ifA "true" "false" "draggable" :: Attribute Bool
 
 href_     = strA "href"                :: Attribute Text
+type_     = strA "type"                :: Attribute Text
+filter_     = strA "filter"                :: Attribute Text
+
 
 cx_         = floatA "cx"                  :: Attribute Float
 cy_         = floatA "cy"                  :: Attribute Float
 
 r_         = floatA "r"                    :: Attribute Float
+
+
+amplitude_         = floatA "amplitude"              :: Attribute Float
+exponent_         = floatA "exponent"                :: Attribute Float
+offset_         = floatA "offset"                    :: Attribute Float
+
+
+slope_         = floatA "slope"                    :: Attribute Float
+intercept_         = floatA "intercept"            :: Attribute Float
+
 
 class_     = strA "class"              :: Attribute Text
 classes_     = spaceSep class_         :: Attribute [Text]
