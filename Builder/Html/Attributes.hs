@@ -11,6 +11,10 @@ import Reflex
 type Style = (Text, Text)
 
 
+aria_valuenow_    = intA "aria-valuenow"              :: Attribute Int
+aria_valuemin_    = intA "aria-valuemin"              :: Attribute Int
+aria_valuemax_    = intA "aria-valuemax"              :: Attribute Int
+
 accept_          = commaListA "accept"               :: Attribute [Text]
 accept_charset_  = spaceListA "accept-charset"       :: Attribute [Text]
 accesskey_       = strA "accesskey"                  :: Attribute Text
