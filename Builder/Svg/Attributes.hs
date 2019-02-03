@@ -8,6 +8,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Linear.V2
+import Linear.V3
 import Control.Lens (view)
 
 import Data.Functor.Contravariant
@@ -123,6 +124,9 @@ stroke_         = strA "stroke"                    :: Attribute Text
 
 pointer_events_         = strA "pointer-events"    :: Attribute Text
 
+text_anchor_        = strA "text-anchor"    :: Attribute Text
+dominant_baseline_        = strA "dominant-baseline"    :: Attribute Text
+
 
 transform_ = spaceSep $ showA "transform"  :: Attribute [Transform]
 
@@ -130,6 +134,24 @@ version_           = strA "version"         :: Attribute Text
 
 id_              = strA "id"                         :: Attribute Text
 hidden_          = boolA "hidden"                    :: Attribute Bool
+
+
+stdDeviation_     = floatA "stdDeviation"        :: Attribute Float
+radius_           = floatA "radius"              :: Attribute Float
+flood_color_      = rgbA "flood-color"           :: Attribute (V3 Float)
+
+
+operator_         = strA "operator"                 :: Attribute Text
+in2_              = strA "in2"                      :: Attribute Text
+in_               = strA "in"                       :: Attribute Text
+
+result_               = strA "result"                       :: Attribute Text
+
+mode_             = strA "mode"                     :: Attribute Text
+
+
+
+
 -- Composite Attributes
 
 xy_ :: Attribute (V2 Float)

@@ -22,6 +22,8 @@ import Control.Lens hiding (chosen)
 import Reflex.Active
 import Data.Coerce
 
+import Linear.V3 (V3(..))
+
 newtype Attribute a
   = Attribute { unAttr :: Map AttributeName (a -> Maybe Text) } deriving (Monoid, Semigroup)
 
@@ -134,6 +136,7 @@ strA name = attrWith (AttributeName Nothing name) Just
 showA :: Show a => Text -> Attribute a
 showA = contramap (T.pack . show) . strA
 
+
 {-# INLINE showingA #-}
 showingA :: (a -> String) -> Text -> Attribute a
 showingA f = contramap (T.pack . f) . strA
@@ -149,6 +152,13 @@ intA = showA
 {-# INLINE floatA #-}
 floatA :: Text -> Attribute Float
 floatA = showA
+
+{-# INLINE rgbA #-}
+rgbA :: Text -> Attribute (V3 Float)
+rgbA = contramap showRgb . strA
+   
+showRgb :: Show a => V3 a -> Text
+showRgb (V3 r g b) = T.pack $ "rgb(" <> show r <> "," <> show g <> "," <> show b <> ")"
 
 {-# INLINE ifA #-}
 ifA :: Text -> Text -> Text -> Attribute Bool
