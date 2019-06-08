@@ -9,8 +9,11 @@ import Data.Map (Map)
 
 import Data.Monoid hiding ((<>))
 import Data.Semigroup
+import Data.List.NonEmpty (NonEmpty(..), nonEmpty)
 
+import Data.Maybe (fromJust)
 import Control.Applicative
+import Data.Foldable (toList)
 
 -- Active data type for mixing Dynamics and static values
 -- originally from: https://github.com/tomsmalley/semantic-reflex/
@@ -30,14 +33,17 @@ instance Reflex t => Applicative (Active t) where
   Dyn f <*> Dyn a = Dyn (f <*> a)
 
 
+instance (Reflex t, Semigroup a) => Semigroup (Active t a) where
+  Static a <> Static b = Static (a <> b)
+  Static a <> Dyn b = Dyn (pure a <> b)
+  Dyn a <> Static b = Dyn (a <> pure b)
+  Dyn a <> Dyn b = Dyn (a <> b)
+  sconcat = fmap sconcat . activeNonEmpty
+
 instance (Reflex t, Monoid a) => Monoid (Active t a) where
   mempty = Static mempty
-  Static a `mappend` Static b = Static (a `mappend` b)
-  Static a `mappend` Dyn b = Dyn (pure a `mappend` b)
-  Dyn a `mappend` Static b = Dyn (a `mappend` pure b)
-  Dyn a `mappend` Dyn b = Dyn (a `mappend` b)
+  mappend = (<>)
   mconcat = fmap mconcat . activeList
-
 
 instance (Reflex t, Num a) => Num (Active t a) where
   (+) = liftA2 (+)
@@ -69,3 +75,7 @@ activeMap as = if null dynamics
 activeList :: Reflex t => [Active t a] -> Active t [a]
 activeList actives = M.elems <$> activeMap m
     where m = M.fromList (zip [0..] actives)
+
+activeNonEmpty :: Reflex t => NonEmpty (Active t a) -> Active t (NonEmpty a)
+activeNonEmpty = fmap (fromJust . nonEmpty) . activeList . toList
+
