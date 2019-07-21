@@ -113,7 +113,7 @@ $(mkElems Nothing
   , C "source"
 
   --Scripting
-  , E "canvas"
+  , C "canvas"
   , E "noscript"
   , E "script"
 
